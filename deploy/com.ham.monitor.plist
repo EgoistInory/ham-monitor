@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ham.monitor</string>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO_DIR__</string>
+
+    <!-- 使用 caffeinate -is 防止 2017 MacBook 在夜间监测期间进入系统休眠 -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-is</string>
+        <string>__PYTHON_BIN__</string>
+        <string>__REPO_DIR__/scripts/run_monitor.py</string>
+        <string>--config</string>
+        <string>__REPO_DIR__/config/default.yaml</string>
+    </array>
+
+    <!-- 每日 22:30 自动拉起，次日 07:00 由程序内 schedule 自动退出并生成日报 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>22</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__REPO_DIR__/data/launchd_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>__REPO_DIR__/data/launchd_stderr.log</string>
+</dict>
+</plist>

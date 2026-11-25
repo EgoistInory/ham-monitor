@@ -1,0 +1,46 @@
+# ham-monitor 默认配置（Phase 1 MVP）
+# 所有电平值在 device_calibrated=false 时均为相对数字电平 (dBFS)，不代表法定声压级 (dB SPL)
+
+node:
+  node_id: "macbook_main"
+  location_tag: "room_center"   # 可选: room_center / ceiling / window_side
+  calibrated: false
+  calibration_file: null        # Phase 2/3 接入测量麦校准曲线 (.txt)
+
+audio:
+  sample_rate: 48000
+  channels: 1
+  block_duration_sec: 0.25      # 250ms 分析帧，兼顾低频分辨率与瞬态响应
+  device: null                  # null 使用系统默认输入，或填设备索引/名称子串
+  reconnect_interval_sec: 3.0   # 音频流异常断线后的自动重连间隔
+
+schedule:
+  enabled: true
+  start_time: "22:30"           # 每日自动监测开始时间（本地时间）
+  end_time: "07:00"             # 次日自动停止并输出日报时间
+
+dsp:
+  low_band_hz: [20.0, 180.0]    # 低频撞击带：楼板蹦跳、重物坠落、拖椅子
+  high_band_hz: [300.0, 4000.0] # 中高频人声带：鬼叫、喊麦、亢奋人声
+  baseline_window_sec: 120.0    # 动态底噪滚动窗口（秒）
+  baseline_quantile: 0.20       # 20% 分位数作为稳态静音基线，抗突发干扰
+  baseline_warmup_sec: 10.0     # 启动预热时长（秒）
+
+trigger:
+  low_delta_db: 12.0            # 低频超出动态底噪触发增量 (dB)
+  low_min_dbfs: -55.0           # 低频绝对下限保护，防极静底噪误触发
+  high_delta_db: 14.0           # 中高频超出动态底噪触发增量 (dB)
+  high_min_dbfs: -50.0          # 中高频绝对下限保护
+  min_active_sec: 0.75          # 连续超阈值确认时长（3 帧 = 0.75s）
+  pre_roll_sec: 15.0            # 触发前内存环形缓冲预录时长（秒）
+  post_roll_sec: 10.0           # 噪声平息后合并冷却/尾录时长（秒）
+  max_event_sec: 300.0          # 单事件最大时长上限（秒），防内存无限增长
+
+storage:
+  base_dir: "data"
+  evidence_dir: "data/evidence" # 永久保存，绝不自动清理
+  raw_dir: "data/raw"           # 仅用于临时调试/探针录制的原始文件
+  db_path: "data/ham_events.sqlite3"
+  reports_dir: "data/reports"
+  raw_retention_days: 7         # 仅自动清理 raw_dir 中超期文件
+  audio_format: "FLAC"          # 无损单声道 16-bit FLAC

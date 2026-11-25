@@ -1,0 +1,46 @@
+# Tier 1（进阶 / 百元级外置 USB 麦或高置衣柜顶节点）
+# 适用场景：外置平直频响 USB 电容麦朝向天花板（垫海绵隔振），或与室内中部节点组成双节点能量比对比
+
+node:
+  node_id: "tier1_usb_ceiling"
+  location_tag: "ceiling"
+  calibrated: false
+  calibration_file: null
+
+audio:
+  sample_rate: 48000
+  channels: 1
+  block_duration_sec: 0.25
+  device: null                  # 建议填入 `probe_mic.py --list-devices` 查到的 USB 麦克风名称子串
+  reconnect_interval_sec: 2.0
+
+schedule:
+  enabled: true
+  start_time: "22:30"
+  end_time: "07:00"
+
+dsp:
+  low_band_hz: [20.0, 180.0]
+  high_band_hz: [300.0, 4000.0]
+  baseline_window_sec: 180.0
+  baseline_quantile: 0.20
+  baseline_warmup_sec: 10.0
+
+trigger:
+  low_delta_db: 10.0            # 外置麦底噪更低，可适度提升低频灵敏度
+  low_min_dbfs: -60.0
+  high_delta_db: 13.0
+  high_min_dbfs: -54.0
+  min_active_sec: 0.50
+  pre_roll_sec: 15.0
+  post_roll_sec: 10.0
+  max_event_sec: 300.0
+
+storage:
+  base_dir: "data"
+  evidence_dir: "data/evidence"
+  raw_dir: "data/raw"
+  db_path: "data/ham_events.sqlite3"
+  reports_dir: "data/reports"
+  raw_retention_days: 7
+  audio_format: "FLAC"

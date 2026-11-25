@@ -1,0 +1,47 @@
+# Tier 0（初级 / 0 成本）：闲置笔记本内置麦克风（2017 Intel MacBook / 旧 Windows / Linux）
+# 适用场景：今晚零成本启动取证，验证楼上夜间作息规律与突刺特征
+# 注意：内置麦通常在 80Hz 以下有滚降，建议先跑 scripts/probe_mic.py 实测微调阈值
+
+node:
+  node_id: "tier0_laptop"
+  location_tag: "room_center"
+  calibrated: false
+  calibration_file: null
+
+audio:
+  sample_rate: 48000
+  channels: 1
+  block_duration_sec: 0.25
+  device: null
+  reconnect_interval_sec: 3.0
+
+schedule:
+  enabled: true
+  start_time: "22:30"
+  end_time: "07:00"
+
+dsp:
+  low_band_hz: [20.0, 180.0]
+  high_band_hz: [300.0, 4000.0]
+  baseline_window_sec: 120.0
+  baseline_quantile: 0.20
+  baseline_warmup_sec: 10.0
+
+trigger:
+  low_delta_db: 12.0
+  low_min_dbfs: -55.0
+  high_delta_db: 14.0
+  high_min_dbfs: -50.0
+  min_active_sec: 0.75
+  pre_roll_sec: 15.0
+  post_roll_sec: 10.0
+  max_event_sec: 300.0
+
+storage:
+  base_dir: "data"
+  evidence_dir: "data/evidence"
+  raw_dir: "data/raw"
+  db_path: "data/ham_events.sqlite3"
+  reports_dir: "data/reports"
+  raw_retention_days: 7
+  audio_format: "FLAC"

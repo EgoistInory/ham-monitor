@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ham-monitor"
+version = "0.1.0"
+description = "Passive acoustic monitoring and verifiable noise evidence logger (Phase 1 MVP)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+]
+
+[tool.setuptools.packages.find]
+include = ["ham*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
