@@ -121,6 +121,8 @@ python scripts/probe_mic.py --duration 60
 
 # 4. Day 2：前台试运行监测主循环（忽略夜间时间窗，Ctrl+C 优雅落盘）
 python scripts/run_monitor.py --ignore-schedule
+# 若使用 Mac mini/台式机 + 有线线控耳机麦（如 EarPods），推荐改用低频避工频模板（配合 caffeinate 防休眠）：
+caffeinate -is python scripts/run_monitor.py --config config/profiles/tier0_wired_headset_mic.yaml -v
 
 # 5. Day 3：macOS 安装每晚 22:30 自动启动的 launchd 定时任务
 bash deploy/install_launchd.sh

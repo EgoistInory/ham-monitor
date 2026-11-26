@@ -74,6 +74,41 @@ def analyze_probe_signal(
     return results
 
 
+def recommend_probe_config(stats: dict[str, dict[str, float]]) -> dict[str, object]:
+    """Derive recommended trigger floors and low-band range from probe statistics.
+
+    Wired 3.5mm headset / consumer communication mics often exhibit elevated
+    20-80 Hz hum or bias noise relative to 80-180 Hz; narrowing `low_band_hz`
+    to [80.0, 220.0] avoids masking floor-impact harmonics.
+    """
+    sub_low_floor = stats["sub_low_20_80hz"]["floor_p20_dbfs"]
+    mid_low_floor = stats["low_80_180hz"]["floor_p20_dbfs"]
+    total_low_floor = stats["low_total_20_180hz"]["floor_p20_dbfs"]
+    high_floor = stats["high_vocal_300_4000hz"]["floor_p20_dbfs"]
+
+    sub_low_excess_db = round(sub_low_floor - mid_low_floor, 1)
+    sub_low_hum_detected = sub_low_excess_db >= 4.0
+
+    if sub_low_hum_detected:
+        return {
+            "sub_low_hum_detected": True,
+            "sub_low_excess_db": sub_low_excess_db,
+            "low_band_hz": [80.0, 220.0],
+            "low_min_dbfs": round(mid_low_floor + 8.0, 1),
+            "high_min_dbfs": round(high_floor + 8.0, 1),
+            "recommended_profile": "config/profiles/tier0_wired_headset_mic.yaml",
+        }
+
+    return {
+        "sub_low_hum_detected": False,
+        "sub_low_excess_db": sub_low_excess_db,
+        "low_band_hz": [20.0, 180.0],
+        "low_min_dbfs": round(total_low_floor + 8.0, 1),
+        "high_min_dbfs": round(high_floor + 8.0, 1),
+        "recommended_profile": "config/default.yaml",
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ham-monitor 现场声学探针脚本")
     parser.add_argument("--list-devices", action="store_true", help="列出所有可用音频输入设备")
@@ -118,11 +153,17 @@ def main() -> int:
     fb = stats["fullband_raw"]
     print(f"  {'fullband_raw':24s} | 全频RMS: {fb['rms_dbfs']:6.1f} dBFS | 瞬时峰值: {fb['peak_dbfs']:6.1f} dBFS")
 
-    low_suggest = round(stats["low_total_20_180hz"]["floor_p20_dbfs"] + 8.0, 1)
-    high_suggest = round(stats["high_vocal_300_4000hz"]["floor_p20_dbfs"] + 8.0, 1)
-    print("\n=== 建议配置参考 (config/default.yaml) ===")
-    print(f"  trigger.low_min_dbfs:  {low_suggest}")
-    print(f"  trigger.high_min_dbfs: {high_suggest}")
+    rec = recommend_probe_config(stats)
+    print(f"\n=== 建议配置参考 ({rec['recommended_profile']}) ===")
+    if rec["sub_low_hum_detected"]:
+        print(
+            f"  [诊断提示] 20–80 Hz 底噪比 80–180 Hz 高出 +{rec['sub_low_excess_db']:.1f} dB"
+            "（常见于 3.5mm 有线耳机麦/工频底噪），"
+            "建议收窄 dsp.low_band_hz 至 [80.0, 220.0] 或直接使用 tier0_wired_headset_mic.yaml。"
+        )
+        print(f"  dsp.low_band_hz:       {rec['low_band_hz']}")
+    print(f"  trigger.low_min_dbfs:  {rec['low_min_dbfs']}")
+    print(f"  trigger.high_min_dbfs: {rec['high_min_dbfs']}")
     print("请将本次实测数据填入 docs/FIELD_TEST.md 留档。")
 
     if args.save_raw:

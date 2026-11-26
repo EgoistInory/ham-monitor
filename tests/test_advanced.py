@@ -66,15 +66,48 @@ def _make_store(tmp_path: Path, node_id: str = "test_node", location: str = "roo
 def test_all_tiered_profiles_load_validly() -> None:
     profiles_dir = Path(__file__).resolve().parent.parent / "config" / "profiles"
     yamls = sorted(profiles_dir.glob("*.yaml"))
-    assert len(yamls) == 3
+    assert len(yamls) == 4
     for p in yamls:
         cfg = load_config(p)
         assert cfg.audio.sample_rate == 48000
         assert cfg.trigger.pre_roll_sec == 15.0
 
+    headset = load_config(profiles_dir / "tier0_wired_headset_mic.yaml")
+    assert headset.node.calibrated is False
+    assert headset.dsp.low_band_hz == (80.0, 220.0)
+
     tier2 = load_config(profiles_dir / "tier2_calibrated_measurement.yaml")
     assert tier2.node.calibrated is True
     assert tier2.node.to_spl_db(-40.0) == 80.0
+
+
+def test_probe_mic_recommends_narrow_low_band_on_sublow_hum() -> None:
+    from scripts.probe_mic import recommend_probe_config
+
+    headset_stats = {
+        "sub_low_20_80hz": {"floor_p20_dbfs": -57.0},
+        "low_80_180hz": {"floor_p20_dbfs": -64.7},
+        "low_total_20_180hz": {"floor_p20_dbfs": -56.1},
+        "high_vocal_300_4000hz": {"floor_p20_dbfs": -64.9},
+    }
+    rec_headset = recommend_probe_config(headset_stats)
+    assert rec_headset["sub_low_hum_detected"] is True
+    assert rec_headset["low_band_hz"] == [80.0, 220.0]
+    assert rec_headset["low_min_dbfs"] == -56.7
+    assert rec_headset["high_min_dbfs"] == -56.9
+    assert rec_headset["recommended_profile"] == "config/profiles/tier0_wired_headset_mic.yaml"
+
+    flat_stats = {
+        "sub_low_20_80hz": {"floor_p20_dbfs": -66.0},
+        "low_80_180hz": {"floor_p20_dbfs": -65.0},
+        "low_total_20_180hz": {"floor_p20_dbfs": -62.5},
+        "high_vocal_300_4000hz": {"floor_p20_dbfs": -64.0},
+    }
+    rec_flat = recommend_probe_config(flat_stats)
+    assert rec_flat["sub_low_hum_detected"] is False
+    assert rec_flat["low_band_hz"] == [20.0, 180.0]
+    assert rec_flat["low_min_dbfs"] == -54.5
+    assert rec_flat["recommended_profile"] == "config/default.yaml"
 
 
 def test_hash_chain_verification_and_deletion_detection(tmp_path: Path) -> None:

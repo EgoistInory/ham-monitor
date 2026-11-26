@@ -1,0 +1,51 @@
+# Tier 0C（无内置麦主机应急 / 0 成本）：Mac mini 或台式机 + 3.5mm / USB-C 有线线控耳机麦（如 EarPods）
+# 适用场景：主机无内置麦克风，先用现有有线耳机麦今晚即刻投入夜间监测
+# 声学适配说明：
+#   1. 3.5mm 模拟线控通信麦在 20–80Hz 普遍存在硬件滚降与 50Hz 工频/偏置底噪，将 low_band_hz 收窄至 [80, 220] Hz
+#      可避开极低频底噪掩盖，显著提升楼板脚步/拖拽等 80–220Hz 中低频谐波信噪比。
+#   2. 摆放时将线控模块（背面拾音孔）垫软布/海绵稳固放置，避免线缆悬空摩擦（听诊器效应）或误压线控按键。
+#   3. 建议先跑 `python scripts/probe_mic.py --duration 60 --save-raw`，按实测底噪微调 low_min_dbfs / high_min_dbfs。
+
+node:
+  node_id: "tier0_wired_headset"
+  location_tag: "room_center"
+  calibrated: false
+  calibration_file: null
+
+audio:
+  sample_rate: 48000
+  channels: 1
+  block_duration_sec: 0.25
+  device: null                  # null 使用系统默认输入；macOS 接 3.5mm 线控耳机麦建议填 "外置麦克风" 或 --device 覆盖
+  reconnect_interval_sec: 3.0
+
+schedule:
+  enabled: true
+  start_time: "22:30"
+  end_time: "07:00"
+
+dsp:
+  low_band_hz: [80.0, 220.0]    # 避开 3.5mm 通信麦 20–80Hz 工频底噪与极低频滚降，聚焦楼板撞击核心谐波
+  high_band_hz: [300.0, 4000.0] # 中高频人声带：喊叫、喧哗、尖锐拖拽
+  baseline_window_sec: 120.0
+  baseline_quantile: 0.20
+  baseline_warmup_sec: 10.0
+
+trigger:
+  low_delta_db: 11.0            # 收窄低频带后底噪更干净，可适度提升撞击灵敏度
+  low_min_dbfs: -56.0
+  high_delta_db: 14.0
+  high_min_dbfs: -55.0
+  min_active_sec: 0.75          # 过滤线控按键轻碰或线缆单次瞬态咔嗒声
+  pre_roll_sec: 15.0
+  post_roll_sec: 10.0
+  max_event_sec: 300.0
+
+storage:
+  base_dir: "data"
+  evidence_dir: "data/evidence"
+  raw_dir: "data/raw"
+  db_path: "data/ham_events.sqlite3"
+  reports_dir: "data/reports"
+  raw_retention_days: 7
+  audio_format: "FLAC"
