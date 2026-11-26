@@ -29,7 +29,16 @@ def test_web_index_and_overview(tmp_path: Path) -> None:
     assert data["corroboration_count"] == 3
     assert data["chain_valid"] is True
     assert len(data["hourly_histogram"]) == 24
+    assert len(data["category_counts"]) >= 4
+    assert len(data["direction_counts"]) >= 2
     assert "2026-11-25" in data["available_dates"]
+
+    tax = client.get("/api/taxonomy")
+    assert tax.status_code == 200
+    tax_data = tax.json()
+    assert len(tax_data["category_groups"]) == 5
+    assert sum(len(g["items"]) for g in tax_data["category_groups"]) == 19
+    assert len(tax_data["directions"]) == 8
 
 
 def test_web_events_waveform_audio_and_review(tmp_path: Path) -> None:
@@ -68,17 +77,28 @@ def test_web_events_waveform_audio_and_review(tmp_path: Path) -> None:
     assert audio_raw.status_code == 200
     assert audio_raw.headers["x-ham-audio-mode"] == "raw"
 
-    # Patch human review without altering raw_evidence
+    # Patch human review (fine-grained label + direction) without altering raw_evidence
     before_sha = events[0]["raw_evidence"]["sha256"]
     rev = client.patch(
         f"/api/events/{event_id}/review",
-        json={"verified": True, "label": "upstairs_mixed", "notes": "已通过控制台复核"},
+        json={
+            "verified": True,
+            "label": "drilling_renovation",
+            "direction": "downstairs",
+            "notes": "已通过控制台复核",
+        },
     )
     assert rev.status_code == 200
     rev_data = rev.json()
     assert rev_data["raw_evidence"]["sha256"] == before_sha
     assert rev_data["human_review"]["verified"] is True
-    assert rev_data["human_review"]["label"] == "upstairs_mixed"
+    assert rev_data["human_review"]["label"] == "drilling_renovation"
+    assert rev_data["human_review"]["direction"] == "downstairs"
+
+    # Multi-dimensional filter by label and direction
+    filtered = client.get("/api/events?label=drilling_renovation&direction=downstairs").json()
+    assert len(filtered) == 1
+    assert filtered[0]["event_id"] == event_id
 
 
 def test_web_chain_corroboration_correlate_and_export(tmp_path: Path) -> None:

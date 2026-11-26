@@ -87,8 +87,9 @@ def prepare_demo_sandbox(sandbox_dir: Path) -> tuple[AppConfig, EvidenceStore]:
             "suspected_external_impact",
             profile,
             True,
-            "upstairs_impact",
-            "23:18 连续重物拖行与楼板踩踏声，已微信提醒物业管家。",
+            "furniture_drag",
+            "upstairs",
+            "23:18 连续桌椅拖拽与重物移动声，已微信提醒物业管家。",
         ),
         (
             datetime(2026, 11, 24, 23, 18, 13, tzinfo=tz),
@@ -106,8 +107,9 @@ def prepare_demo_sandbox(sandbox_dir: Path) -> tuple[AppConfig, EvidenceStore]:
             "suspected_external_impact",
             ceiling_profile,
             True,
-            "upstairs_impact",
-            "衣柜顶备用机同窗捕获，能量较室内中部高出约 5.9 dB。",
+            "furniture_drag",
+            "upstairs",
+            "衣柜顶备用机同窗捕获，能量较室内中部高出约 5.9 dB，确认来自正楼上。",
         ),
         (
             datetime(2026, 11, 24, 23, 52, 40, tzinfo=tz),
@@ -125,8 +127,9 @@ def prepare_demo_sandbox(sandbox_dir: Path) -> tuple[AppConfig, EvidenceStore]:
             "suspected_external_mixed",
             profile,
             True,
-            "upstairs_mixed",
-            "深夜直播喊麦叠加蹦跳，已留存记录并向社区网格员报备。",
+            "shouting_screaming",
+            "upstairs",
+            "深夜突发尖叫喊麦叠加蹦跳，已留存记录并向社区网格员报备。",
         ),
         (
             datetime(2026, 11, 25, 0, 36, 5, tzinfo=tz),
@@ -143,9 +146,10 @@ def prepare_demo_sandbox(sandbox_dir: Path) -> tuple[AppConfig, EvidenceStore]:
             -14.2,
             "suspected_external_vocal",
             profile,
-            False,
-            None,
-            "",
+            True,
+            "loud_audio_speaker",
+            "uncertain",
+            "凌晨音响外放伴随低频人声，方位暂难区分楼上或斜楼上，待进一步排查。",
         ),
         (
             datetime(2026, 11, 25, 1, 44, 22, tzinfo=tz),
@@ -163,8 +167,9 @@ def prepare_demo_sandbox(sandbox_dir: Path) -> tuple[AppConfig, EvidenceStore]:
             "suspected_external_mixed",
             profile,
             True,
-            "upstairs_mixed",
-            "凌晨一点半剧烈蹦跳惊醒家人，已拨打 110 报备出警。",
+            "jumping_stomping",
+            "upstairs",
+            "凌晨一点半天花板明显剧烈蹦跳惊醒家人，已拨打 110 报备出警。",
         ),
         (
             datetime(2026, 11, 25, 1, 44, 23, tzinfo=tz),
@@ -183,6 +188,7 @@ def prepare_demo_sandbox(sandbox_dir: Path) -> tuple[AppConfig, EvidenceStore]:
             ceiling_profile,
             False,
             None,
+            "uncertain",
             "",
         ),
     ]
@@ -206,6 +212,7 @@ def prepare_demo_sandbox(sandbox_dir: Path) -> tuple[AppConfig, EvidenceStore]:
         prof,
         verified,
         label,
+        direction,
         notes,
     ) in enumerate(specs):
         pcm = _synth_clip(sr, dur, lf, la, hf, ha, seed=100 + idx)
@@ -229,7 +236,9 @@ def prepare_demo_sandbox(sandbox_dir: Path) -> tuple[AppConfig, EvidenceStore]:
         if idx == 4:
             late_event_id = rec["event_id"]
         if verified:
-            store.update_human_review(rec["event_id"], verified=True, label=label, notes=notes)
+            store.update_human_review(
+                rec["event_id"], verified=True, label=label, direction=direction, notes=notes
+            )
 
     store.add_corroboration_log(
         category="property_notice",

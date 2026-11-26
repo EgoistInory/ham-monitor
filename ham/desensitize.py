@@ -59,6 +59,7 @@ def sanitize_record(
         "human_review": {
             "verified": rev["verified"],
             "label": rev["label"],
+            "direction": rev.get("direction", ""),
             "notes": safe_notes,
         },
     }
@@ -184,6 +185,7 @@ def export_share_bundle(
                 "device_calibrated",
                 "human_verified",
                 "human_label",
+                "human_direction",
                 "original_sha256",
             ]
         )
@@ -203,6 +205,7 @@ def export_share_bundle(
                     d["device_calibrated"],
                     h["verified"],
                     h["label"] or "",
+                    h.get("direction", ""),
                     d["sha256"],
                 ]
             )

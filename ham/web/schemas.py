@@ -46,6 +46,7 @@ class AlgoMetricsSchema(BaseModel):
 class HumanReviewSchema(BaseModel):
     verified: bool
     label: Optional[str] = None
+    direction: str = ""
     notes: str = ""
 
 
@@ -59,6 +60,7 @@ class EventRecordSchema(BaseModel):
 class ReviewUpdateRequest(BaseModel):
     verified: bool = True
     label: Optional[str] = Field(default=None, max_length=64)
+    direction: Optional[str] = Field(default=None, max_length=64)
     notes: str = Field(default="", max_length=1000)
 
 
@@ -89,6 +91,21 @@ class HourlyBucketSchema(BaseModel):
     max_delta_db: float
 
 
+class CategoryStatSchema(BaseModel):
+    code: str
+    label: str
+    group: str
+    group_label: str
+    count: int
+    total_duration_sec: float
+
+
+class DirectionStatSchema(BaseModel):
+    code: str
+    label: str
+    count: int
+
+
 class OverviewResponse(BaseModel):
     selected_date: Optional[str]
     available_dates: list[str]
@@ -103,6 +120,8 @@ class OverviewResponse(BaseModel):
     total_duration_sec: float
     max_delta_db: float
     band_counts: dict[str, int]
+    category_counts: list[CategoryStatSchema]
+    direction_counts: list[DirectionStatSchema]
     corroboration_count: int
     chain_valid: bool
     chain_errors: list[str]

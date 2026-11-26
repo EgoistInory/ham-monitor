@@ -190,6 +190,7 @@ def test_preroll_15s_event_merging_flac_and_sha256(tmp_path: Path) -> None:
     assert updated["human_review"] == {
         "verified": True,
         "label": "upstairs_impact_and_scream",
+        "direction": "",
         "notes": "23:40 连续蹦跳+鬼叫",
     }
 

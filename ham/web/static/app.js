@@ -1,6 +1,9 @@
 const state = {
   selectedDate: "",
   events: [],
+  taxonomy: { category_groups: [], directions: [] },
+  categoryLookup: {},
+  directionLookup: {},
   selectedEventId: null,
   drawerEventId: null,
   audioMode: "desensitized",
@@ -284,6 +287,148 @@ function renderHourlyChart(buckets) {
   `;
 }
 
+/* Taxonomy Loading & Select Population */
+async function loadTaxonomy() {
+  const tax = await apiFetch("/api/taxonomy");
+  state.taxonomy = tax;
+  state.categoryLookup = {};
+  state.directionLookup = {};
+
+  tax.category_groups.forEach((g) => {
+    g.items.forEach((item) => {
+      state.categoryLookup[item.code] = { ...item, group: g.group, group_label: g.group_label };
+    });
+  });
+  tax.directions.forEach((d) => {
+    state.directionLookup[d.code] = d;
+  });
+
+  const buildCategoryOptions = (placeholder, includeUnclassified = false) => {
+    let html = `<option value="">${placeholder}</option>`;
+    if (includeUnclassified) {
+      html += `<option value="unclassified">未分类（待打标）</option>`;
+    }
+    tax.category_groups.forEach((g) => {
+      html += `<optgroup label="${escapeHtml(g.group_label)}">`;
+      g.items.forEach((item) => {
+        html += `<option value="${escapeHtml(item.code)}">${escapeHtml(item.label)}</option>`;
+      });
+      html += `</optgroup>`;
+    });
+    return html;
+  };
+
+  const buildDirectionOptions = (placeholder) => {
+    let html = `<option value="">${placeholder}</option>`;
+    tax.directions.forEach((d) => {
+      html += `<option value="${escapeHtml(d.code)}">${escapeHtml(d.label)}</option>`;
+    });
+    return html;
+  };
+
+  $("rev-label").innerHTML = buildCategoryOptions("-- 选择细化噪声类型 --");
+  $("drw-rev-label").innerHTML = buildCategoryOptions("-- 选择细化噪声类型 --");
+  $("filter-label").innerHTML = buildCategoryOptions("全部噪声类型", true);
+
+  $("rev-direction").innerHTML = buildDirectionOptions("-- 选择声源方位 --");
+  $("drw-rev-direction").innerHTML = buildDirectionOptions("-- 声源方位归属 --");
+  $("filter-direction").innerHTML = buildDirectionOptions("全部方位归属");
+}
+
+function getCategoryDisplay(code) {
+  if (!code) return "未分类";
+  return state.categoryLookup[code]?.label || code;
+}
+
+function getDirectionDisplay(code, short = true) {
+  if (!code) return "方位待定";
+  const d = state.directionLookup[code];
+  return d ? (short ? d.short : d.label) : code;
+}
+
+function renderTaxonomyCharts(categoryCounts, directionCounts, total) {
+  const denom = Math.max(1, total);
+  const groupFill = {
+    impact: "fill-low",
+    vocal: "fill-high",
+    media: "fill-amber",
+    domestic: "",
+    ambient: "fill-muted",
+    unclassified: "fill-muted",
+  };
+
+  const catWrap = $("category-rank-list");
+  if (!categoryCounts || !categoryCounts.length) {
+    catWrap.innerHTML = `<div class="empty-state" style="min-height:110px"><p>暂无分类统计数据</p></div>`;
+  } else {
+    catWrap.innerHTML = categoryCounts
+      .slice(0, 6)
+      .map((item) => {
+        const pct = Math.round((item.count / denom) * 100);
+        const fillCls = groupFill[item.group] || "";
+        return `
+          <button type="button" class="rank-item" data-filter-cat="${escapeHtml(item.code)}">
+            <div class="rank-top">
+              <span class="rank-name">
+                <span>${escapeHtml(item.label)}</span>
+                <span class="pill-tag" style="font-size:11px; padding:1px 7px">${escapeHtml(item.group_label)}</span>
+              </span>
+              <span class="rank-nums mono">${item.count} 次 · ${item.total_duration_sec.toFixed(1)}s (${pct}%)</span>
+            </div>
+            <div class="rank-track"><div class="rank-fill ${fillCls}" style="width:${pct}%"></div></div>
+          </button>
+        `;
+      })
+      .join("");
+    catWrap.querySelectorAll("button[data-filter-cat]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        $("filter-label").value = btn.dataset.filterCat;
+        $("filter-direction").value = "";
+        switchTab("evidence");
+        loadEvents();
+      });
+    });
+  }
+
+  const dirFill = {
+    upstairs: "",
+    diagonal_upstairs: "fill-low",
+    downstairs: "fill-amber",
+    adjacent: "fill-high",
+    uncertain: "fill-muted",
+  };
+
+  const dirWrap = $("direction-rank-list");
+  if (!directionCounts || !directionCounts.length) {
+    dirWrap.innerHTML = `<div class="empty-state" style="min-height:110px"><p>暂无方位归属统计</p></div>`;
+  } else {
+    dirWrap.innerHTML = directionCounts
+      .slice(0, 6)
+      .map((item) => {
+        const pct = Math.round((item.count / denom) * 100);
+        const fillCls = dirFill[item.code] ?? "fill-muted";
+        return `
+          <button type="button" class="rank-item" data-filter-dir="${escapeHtml(item.code)}">
+            <div class="rank-top">
+              <span class="rank-name">${escapeHtml(item.label)}</span>
+              <span class="rank-nums mono">${item.count} 次 (${pct}%)</span>
+            </div>
+            <div class="rank-track"><div class="rank-fill ${fillCls}" style="width:${pct}%"></div></div>
+          </button>
+        `;
+      })
+      .join("");
+    dirWrap.querySelectorAll("button[data-filter-dir]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        $("filter-direction").value = btn.dataset.filterDir;
+        $("filter-label").value = "";
+        switchTab("evidence");
+        loadEvents();
+      });
+    });
+  }
+}
+
 /* Load Overview */
 async function loadOverview() {
   const q = state.selectedDate ? `?date=${encodeURIComponent(state.selectedDate)}` : "";
@@ -322,6 +467,7 @@ async function loadOverview() {
 
   renderBandDonut(ov.band_counts, ov.total_events);
   renderHourlyChart(ov.hourly_histogram);
+  renderTaxonomyCharts(ov.category_counts, ov.direction_counts, ov.total_events);
 }
 
 /* Load Events (Overview Table + Evidence Vault List) */
@@ -330,8 +476,12 @@ async function loadEvents() {
   if (state.selectedDate) params.set("date", state.selectedDate);
   const band = $("filter-band").value;
   const verified = $("filter-verified").value;
+  const label = $("filter-label").value;
+  const direction = $("filter-direction").value;
   if (band) params.set("band", band);
   if (verified) params.set("verified", verified);
+  if (label) params.set("label", label);
+  if (direction) params.set("direction", direction);
 
   const events = await apiFetch(`/api/events?${params.toString()}`);
   state.events = events;
@@ -347,15 +497,19 @@ async function loadEvents() {
       .map((ev) => {
         const r = ev.raw_evidence;
         const m = ev.algo_metrics;
+        const h = ev.human_review;
         const bMeta = BAND_LABELS[m.trigger_band] || { short: m.trigger_band, cls: "" };
-        const revPill = ev.human_review.verified
+        const catText = h.label ? getCategoryDisplay(h.label) : bMeta.short;
+        const dirText = getDirectionDisplay(h.direction, true);
+        const dirCls = h.direction === "upstairs" ? "pill-low" : h.direction === "uncertain" || !h.direction ? "" : "pill-amber";
+        const revPill = h.verified
           ? `<span class="pill-tag pill-ok">已复核</span>`
           : `<span class="pill-tag pill-amber">待复核</span>`;
         return `
           <tr data-drawer-id="${ev.event_id}">
             <td class="mono" style="font-weight:600">${formatShortTime(r.trigger_time)}</td>
-            <td class="mono"><span class="cell-truncate" title="${escapeHtml(r.node_id)} (${escapeHtml(r.location_tag)})">${escapeHtml(r.node_id)}</span></td>
-            <td><span class="pill-tag ${bMeta.cls}">${bMeta.short}</span></td>
+            <td><span class="pill-tag ${bMeta.cls}">${escapeHtml(catText)}</span></td>
+            <td><span class="pill-tag ${dirCls}">${escapeHtml(dirText)}</span></td>
             <td>${revPill}</td>
             <td class="mono num-col">${m.duration_sec.toFixed(1)} s</td>
             <td class="mono num-col" style="font-weight:600">+${m.delta_db.toFixed(1)} dB</td>
@@ -388,9 +542,12 @@ async function loadEvents() {
   listEl.innerHTML = events
     .map((ev) => {
       const m = ev.algo_metrics;
+      const h = ev.human_review;
       const bMeta = BAND_LABELS[m.trigger_band] || { short: m.trigger_band, cls: "" };
       const selected = ev.event_id === state.selectedEventId ? "selected" : "";
-      const revPill = ev.human_review.verified
+      const catText = h.label ? getCategoryDisplay(h.label) : bMeta.short;
+      const dirText = h.direction ? ` · ${getDirectionDisplay(h.direction, true)}` : "";
+      const revPill = h.verified
         ? `<span class="pill-tag pill-ok">已复核</span>`
         : `<span class="pill-tag pill-amber">待复核</span>`;
       return `
@@ -400,7 +557,7 @@ async function loadEvents() {
             ${revPill}
           </div>
           <div class="vault-item-bottom">
-            <span>${bMeta.short}</span>
+            <span>${escapeHtml(catText)}${escapeHtml(dirText)}</span>
             <strong class="mono">+${m.delta_db.toFixed(1)} dB · ${m.duration_sec.toFixed(1)}s</strong>
           </div>
         </button>
@@ -470,6 +627,7 @@ function renderVaultInspector(ev) {
   $("ins-chain-hash").textContent = r.chain_hash || "-";
 
   $("rev-label").value = h.label || "";
+  $("rev-direction").value = h.direction || "";
   $("rev-verified").checked = Boolean(h.verified);
   $("rev-notes").value = h.notes || "";
 
@@ -501,6 +659,7 @@ async function openEvidenceDrawer(eventId) {
 
   $("drw-sha256").textContent = r.sha256;
   $("drw-rev-label").value = h.label || "";
+  $("drw-rev-direction").value = h.direction || "";
   $("drw-rev-verified").checked = Boolean(h.verified);
   $("drw-rev-notes").value = h.notes || "";
 
@@ -765,14 +924,14 @@ async function handleVerifyChain() {
   }
 }
 
-async function saveReviewFor(eventId, verified, label, notes, btnId) {
+async function saveReviewFor(eventId, verified, label, direction, notes, btnId) {
   if (!eventId) return;
   const btn = $(btnId);
   btn.disabled = true;
   try {
     await apiFetch(`/api/events/${encodeURIComponent(eventId)}/review`, {
       method: "PATCH",
-      body: JSON.stringify({ verified, label: label || null, notes }),
+      body: JSON.stringify({ verified, label: label || null, direction: direction || "", notes }),
     });
     showToast("人工复核记录已保存（原始文件与哈希不变）", "success");
     await Promise.all([loadOverview(), loadEvents()]);
@@ -898,12 +1057,26 @@ function bindEvents() {
 
   $("review-form").addEventListener("submit", (e) => {
     e.preventDefault();
-    saveReviewFor(state.selectedEventId, $("rev-verified").checked, $("rev-label").value, $("rev-notes").value, "btn-save-review");
+    saveReviewFor(
+      state.selectedEventId,
+      $("rev-verified").checked,
+      $("rev-label").value,
+      $("rev-direction").value,
+      $("rev-notes").value,
+      "btn-save-review"
+    );
   });
 
   $("drawer-review-form").addEventListener("submit", (e) => {
     e.preventDefault();
-    saveReviewFor(state.drawerEventId, $("drw-rev-verified").checked, $("drw-rev-label").value, $("drw-rev-notes").value, "drw-save-review");
+    saveReviewFor(
+      state.drawerEventId,
+      $("drw-rev-verified").checked,
+      $("drw-rev-label").value,
+      $("drw-rev-direction").value,
+      $("drw-rev-notes").value,
+      "drw-save-review"
+    );
   });
 
   $("global-date-select").addEventListener("change", (e) => {
@@ -912,6 +1085,8 @@ function bindEvents() {
   });
   $("filter-band").addEventListener("change", loadEvents);
   $("filter-verified").addEventListener("change", loadEvents);
+  $("filter-label").addEventListener("change", loadEvents);
+  $("filter-direction").addEventListener("change", loadEvents);
   $("btn-verify-chain-top").addEventListener("click", handleVerifyChain);
   $("corroboration-form").addEventListener("submit", handleAddCorroboration);
   $("export-form").addEventListener("submit", (e) => { e.preventDefault(); triggerShareExport(); });
@@ -927,6 +1102,7 @@ async function bootstrap() {
   initTheme();
   bindEvents();
   try {
+    await loadTaxonomy();
     await refreshAll();
   } catch (err) {
     showToast(`初始化连接失败: ${err.message}`, "error");

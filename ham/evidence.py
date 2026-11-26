@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import soundfile as sf
 
 from ham.config import DeviceProfile, StorageConfig
+from ham.taxonomy import get_category_label, get_direction_label
 from ham.trigger import CompletedEvent
 
 GENESIS_CHAIN_HASH = "0" * 64
@@ -112,6 +113,7 @@ class EvidenceStore:
                     -- human_review (mutable by user only)
                     human_verified INTEGER NOT NULL DEFAULT 0,
                     human_label TEXT,
+                    human_direction TEXT NOT NULL DEFAULT '',
                     human_notes TEXT NOT NULL DEFAULT ''
                 )
                 """
@@ -122,6 +124,8 @@ class EvidenceStore:
                 conn.execute("ALTER TABLE events ADD COLUMN prev_chain_hash TEXT NOT NULL DEFAULT ''")
             if "chain_hash" not in cols:
                 conn.execute("ALTER TABLE events ADD COLUMN chain_hash TEXT NOT NULL DEFAULT ''")
+            if "human_direction" not in cols:
+                conn.execute("ALTER TABLE events ADD COLUMN human_direction TEXT NOT NULL DEFAULT ''")
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_events_date ON events(event_date)")
 
@@ -217,6 +221,7 @@ class EvidenceStore:
                 "human_review": {
                     "verified": False,
                     "label": None,
+                    "direction": "",
                     "notes": "",
                 },
             }
@@ -289,17 +294,28 @@ class EvidenceStore:
         verified: bool,
         label: Optional[str] = None,
         notes: str = "",
+        direction: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Update ONLY human_review fields; raw_evidence and algo_metrics remain immutable."""
         with self._connect() as conn:
-            cur = conn.execute(
-                """
-                UPDATE events
-                SET human_verified = ?, human_label = ?, human_notes = ?
-                WHERE event_id = ?
-                """,
-                (int(bool(verified)), label, notes, event_id),
-            )
+            if direction is None:
+                cur = conn.execute(
+                    """
+                    UPDATE events
+                    SET human_verified = ?, human_label = ?, human_notes = ?
+                    WHERE event_id = ?
+                    """,
+                    (int(bool(verified)), label, notes, event_id),
+                )
+            else:
+                cur = conn.execute(
+                    """
+                    UPDATE events
+                    SET human_verified = ?, human_label = ?, human_direction = ?, human_notes = ?
+                    WHERE event_id = ?
+                    """,
+                    (int(bool(verified)), label, direction, notes, event_id),
+                )
             if cur.rowcount == 0:
                 raise KeyError(f"Event not found: {event_id}")
 
@@ -479,7 +495,12 @@ class EvidenceStore:
                 algo = e["algo_metrics"]
                 rev = e["human_review"]
                 t_str = datetime.fromisoformat(raw["trigger_time"]).strftime("%H:%M:%S")
-                rev_str = f"已复核 ({rev['label'] or '确认'})" if rev["verified"] else "待复核"
+                if rev["verified"]:
+                    cat_str = get_category_label(rev["label"]) if rev["label"] else "确认"
+                    dir_str = f"/{get_direction_label(rev.get('direction'), short=True)}" if rev.get("direction") else ""
+                    rev_str = f"已复核 ({cat_str}{dir_str})"
+                else:
+                    rev_str = "待复核"
                 lines.append(
                     f"| {t_str} | {algo['duration_sec']:.1f} | `{algo['trigger_band']}` | "
                     f"{algo['peak_dbfs']:.1f} | +{algo['delta_db']:.1f} | {rev_str} | `{raw['file']}` |"
@@ -550,6 +571,7 @@ class EvidenceStore:
             "human_review": {
                 "verified": bool(row["human_verified"]),
                 "label": row["human_label"],
+                "direction": row["human_direction"] if "human_direction" in row.keys() else "",
                 "notes": row["human_notes"],
             },
         }

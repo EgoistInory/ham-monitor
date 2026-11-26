@@ -583,6 +583,86 @@ html, body {
   display: block;
 }
 
+/* Taxonomy & Source Attribution Ranked Bars */
+.taxonomy-charts-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 22px;
+  align-items: stretch;
+}
+
+.rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.rank-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: 8px;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.rank-item:hover {
+  background: var(--bg-hover);
+}
+
+.rank-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.rank-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+  min-width: 0;
+}
+
+.rank-nums {
+  font-size: 12px;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.rank-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+
+.rank-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.35s var(--ease-out);
+}
+
+.rank-fill.fill-low { background: var(--signal-low); }
+.rank-fill.fill-high { background: var(--signal-high); }
+.rank-fill.fill-amber { background: var(--status-amber); }
+.rank-fill.fill-muted { background: var(--ink-muted); opacity: 0.55; }
+
+.form-three {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
+
 /* Archival Data Table */
 .table-card {
   padding-bottom: 14px;
@@ -1246,6 +1326,6 @@ select:focus, input[type="text"]:focus, textarea:focus {
   .rail-nav { flex-direction: row; flex-wrap: wrap; }
   .rail-item { width: auto; }
   .archival-kpi-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .overview-charts-grid, .split-vault, .two-col-layout { grid-template-columns: 1fr; }
+  .overview-charts-grid, .taxonomy-charts-grid, .split-vault, .two-col-layout, .form-three { grid-template-columns: 1fr; }
   .col-span-2 { grid-column: auto; }
 }

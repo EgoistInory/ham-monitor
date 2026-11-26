@@ -74,16 +74,15 @@
       </div>
 
       <form id="drawer-review-form" class="drawer-section stack-form">
-        <span class="section-label">快速人工复核</span>
-        <select id="drw-rev-label">
-          <option value="">-- 选择分类标签 --</option>
-          <option value="upstairs_impact">upstairs_impact（楼上蹦跳/撞击）</option>
-          <option value="upstairs_vocal">upstairs_vocal（楼上喊叫/直播）</option>
-          <option value="upstairs_mixed">upstairs_mixed（撞击+人声混合）</option>
-          <option value="self_noise">self_noise（本户误触排除）</option>
-          <option value="street_noise">street_noise（窗外车流/环境）</option>
-          <option value="appliance_hum">appliance_hum（设备共振）</option>
-        </select>
+        <span class="section-label">快速人工复核（类型与方位解耦）</span>
+        <div class="form-two">
+          <select id="drw-rev-label" aria-label="细化噪声类型">
+            <option value="">-- 选择细化噪声类型 --</option>
+          </select>
+          <select id="drw-rev-direction" aria-label="声源方位归属">
+            <option value="">-- 声源方位归属 --</option>
+          </select>
+        </div>
         <textarea id="drw-rev-notes" rows="2" placeholder="填写客观事实备注..."></textarea>
         <div class="section-row-between">
           <label class="inline-check">
@@ -250,6 +249,31 @@
             </article>
           </div>
 
+          <!-- Taxonomy & Source Attribution Analytical Row -->
+          <div class="taxonomy-charts-grid">
+            <article class="vellum-card">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title serif">细化噪声行为排行</h2>
+                  <p class="card-sub">点击任意类型条直接跳转证据库筛选查阅</p>
+                </div>
+                <span class="card-meta">5 大类 · 19 项细化</span>
+              </div>
+              <div id="category-rank-list" class="rank-list"></div>
+            </article>
+
+            <article class="vellum-card">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title serif">声源方位归属统计</h2>
+                  <p class="card-sub">区分“明确正楼上”与“楼下/隔壁/待定”，守住客观举证边界</p>
+                </div>
+                <span class="card-meta">点击按方位筛选</span>
+              </div>
+              <div id="direction-rank-list" class="rank-list"></div>
+            </article>
+          </div>
+
           <!-- Full-Width Archival Evidence Table (Click any row -> Slide-Over Forensic Drawer) -->
           <article class="vellum-card table-card">
             <div class="card-head">
@@ -264,8 +288,8 @@
                 <thead>
                   <tr>
                     <th>触发时间</th>
-                    <th>节点来源</th>
-                    <th>声源频段</th>
+                    <th>细化噪声类型</th>
+                    <th>方位归属</th>
                     <th>复核状态</th>
                     <th class="num-col">时长</th>
                     <th class="num-col">超基线增量</th>
@@ -297,6 +321,12 @@
                     <option value="">全部状态</option>
                     <option value="false">待复核</option>
                     <option value="true">已复核</option>
+                  </select>
+                  <select id="filter-label" aria-label="按细化噪声类型筛选">
+                    <option value="">全部噪声类型</option>
+                  </select>
+                  <select id="filter-direction" aria-label="按声源方位筛选">
+                    <option value="">全部方位归属</option>
                   </select>
                 </div>
               </div>
@@ -361,24 +391,24 @@
 
                 <form id="review-form" class="inset-panel stack-form">
                   <span class="section-label">人工复核打标（仅更新 Human Review，绝不修改原始音频与哈希）</span>
-                  <div class="form-two">
+                  <div class="form-three">
                     <label class="field">
-                      <span>人工分类标签</span>
+                      <span>细化噪声类型（5 大类 · 19 项）</span>
                       <select id="rev-label">
-                        <option value="">-- 选择标签 --</option>
-                        <option value="upstairs_impact">upstairs_impact（楼上蹦跳/撞击）</option>
-                        <option value="upstairs_vocal">upstairs_vocal（楼上喊叫/直播）</option>
-                        <option value="upstairs_mixed">upstairs_mixed（撞击+人声混合）</option>
-                        <option value="self_noise">self_noise（本户误触排除）</option>
-                        <option value="street_noise">street_noise（窗外车流/环境）</option>
-                        <option value="appliance_hum">appliance_hum（设备共振）</option>
+                        <option value="">-- 选择细化噪声类型 --</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>声源方位归属（不确定请选待定）</span>
+                      <select id="rev-direction">
+                        <option value="">-- 选择声源方位 --</option>
                       </select>
                     </label>
                     <label class="field">
                       <span>复核确认状态</span>
                       <div class="inline-check" style="height:36px">
                         <input type="checkbox" id="rev-verified" class="toggle-switch" checked />
-                        <span>标记为已人工复核</span>
+                        <span>已人工复核</span>
                       </div>
                     </label>
                   </div>

@@ -14,11 +14,13 @@ if str(REPO_ROOT) not in sys.path:
 
 from ham.config import load_config
 from ham.evidence import EvidenceStore
+from ham.taxonomy import taxonomy_payload
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ham-monitor 证据校验与人工复核工具")
     parser.add_argument("--config", type=Path, default=REPO_ROOT / "config" / "default.yaml")
+    parser.add_argument("--list-taxonomy", action="store_true", help="列出全部标准细化噪声分类与声源方位代码")
     parser.add_argument("--list-date", help="列出指定日期 YYYY-MM-DD 的全部事件")
     parser.add_argument("--verify", metavar="EVENT_ID", help="校验指定事件的 FLAC SHA-256 完整性")
     parser.add_argument(
@@ -29,10 +31,19 @@ def main() -> int:
     parser.add_argument("--event-id", help="要人工复核打标的事件 ID")
     parser.add_argument(
         "--label",
-        help="人工复核标签（如 upstairs_impact / upstairs_vocal / self_noise / street_noise）",
+        help="人工细化噪声分类代码（使用 --list-taxonomy 查看全部 19 项标准分类）",
+    )
+    parser.add_argument(
+        "--direction",
+        default=None,
+        help="声源方位归属（upstairs / diagonal_upstairs / downstairs / adjacent / public_facility / outdoor / self_household / uncertain）",
     )
     parser.add_argument("--notes", default="", help="人工复核备注")
     args = parser.parse_args()
+
+    if args.list_taxonomy:
+        print(json.dumps(taxonomy_payload(), ensure_ascii=False, indent=2))
+        return 0
 
     cfg = load_config(args.config)
     store = EvidenceStore(cfg.storage, cfg.node)
@@ -62,6 +73,7 @@ def main() -> int:
             event_id=args.event_id,
             verified=True,
             label=args.label,
+            direction=args.direction,
             notes=args.notes,
         )
         print("已更新人工复核记录:")

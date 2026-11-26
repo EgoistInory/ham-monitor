@@ -19,12 +19,20 @@ from ham.correlate import correlate_dual_nodes
 from ham.desensitize import export_share_bundle
 from ham.dsp import rms_dbfs
 from ham.evidence import EvidenceStore
+from ham.taxonomy import (
+    get_category_group,
+    get_category_label,
+    get_direction_label,
+    taxonomy_payload,
+)
 from ham.web.demo import prepare_demo_sandbox
 from ham.web.schemas import (
+    CategoryStatSchema,
     ChainVerifyResponse,
     CorrelatedPairSchema,
     CorroborationCreateRequest,
     CorroborationSchema,
+    DirectionStatSchema,
     EventRecordSchema,
     HourlyBucketSchema,
     OverviewResponse,
@@ -66,6 +74,12 @@ StateDep = Annotated[WebState, Depends(get_state)]
 api_router = APIRouter(prefix="/api", tags=["ham-monitor"])
 
 
+@api_router.get("/taxonomy")
+def get_taxonomy() -> dict[str, Any]:
+    """Return single-source-of-truth fine-grained noise categories and source directions."""
+    return taxonomy_payload()
+
+
 @api_router.get("/overview")
 def get_overview(
     state: StateDep,
@@ -94,21 +108,62 @@ def get_overview(
     verified_count = 0
     total_dur = 0.0
     max_delta = 0.0
+    cat_agg: dict[str, dict[str, Any]] = {}
+    dir_agg: dict[str, int] = {}
 
     for ev in events:
         m = ev["algo_metrics"]
+        rev = ev["human_review"]
         band = m["trigger_band"]
         band_counts[band] = band_counts.get(band, 0) + 1
-        if ev["human_review"]["verified"]:
+        if rev["verified"]:
             verified_count += 1
-        total_dur += float(m["duration_sec"])
+        dur = float(m["duration_sec"])
+        total_dur += dur
         max_delta = max(max_delta, float(m["delta_db"]))
+
+        cat_code = rev.get("label") or "unclassified"
+        if cat_code not in cat_agg:
+            grp, grp_label = get_category_group(rev.get("label"))
+            cat_agg[cat_code] = {
+                "code": cat_code,
+                "label": get_category_label(rev.get("label")),
+                "group": grp,
+                "group_label": grp_label,
+                "count": 0,
+                "dur": 0.0,
+            }
+        cat_agg[cat_code]["count"] += 1
+        cat_agg[cat_code]["dur"] += dur
+
+        dir_code = rev.get("direction") or "uncertain"
+        dir_agg[dir_code] = dir_agg.get(dir_code, 0) + 1
 
         hour = datetime.fromisoformat(ev["raw_evidence"]["trigger_time"]).hour
         bucket = hourly_map[hour]
         bucket["count"] = int(bucket["count"]) + 1
-        bucket["dur"] = float(bucket["dur"]) + float(m["duration_sec"])
+        bucket["dur"] = float(bucket["dur"]) + dur
         bucket["max_delta"] = max(float(bucket["max_delta"]), float(m["delta_db"]))
+
+    category_stats = [
+        CategoryStatSchema(
+            code=item["code"],
+            label=item["label"],
+            group=item["group"],
+            group_label=item["group_label"],
+            count=item["count"],
+            total_duration_sec=round(item["dur"], 1),
+        )
+        for item in sorted(cat_agg.values(), key=lambda x: (-x["count"], -x["dur"]))
+    ]
+    direction_stats = [
+        DirectionStatSchema(
+            code=code,
+            label=get_direction_label(code, short=False),
+            count=cnt,
+        )
+        for code, cnt in sorted(dir_agg.items(), key=lambda x: -x[1])
+    ]
 
     # Order hours starting from 20:00 through 07:00 first for nocturnal readability, or 24h cycle from 20:00
     hour_order = list(range(20, 24)) + list(range(0, 20))
@@ -139,6 +194,8 @@ def get_overview(
         total_duration_sec=round(total_dur, 1),
         max_delta_db=round(max_delta, 1),
         band_counts=band_counts,
+        category_counts=category_stats,
+        direction_counts=direction_stats,
         corroboration_count=len(corroborations),
         chain_valid=chain_valid,
         chain_errors=chain_errors,
@@ -152,6 +209,8 @@ def list_events(
     date: Annotated[Optional[str], Query()] = None,
     band: Annotated[Optional[str], Query()] = None,
     verified: Annotated[Optional[bool], Query()] = None,
+    label: Annotated[Optional[str], Query()] = None,
+    direction: Annotated[Optional[str], Query()] = None,
 ) -> list[EventRecordSchema]:
     events = state.store.list_events_by_date(date) if date else state.store.list_all_events()
     filtered: list[EventRecordSchema] = []
@@ -160,6 +219,14 @@ def list_events(
             continue
         if verified is not None and bool(ev["human_review"]["verified"]) != verified:
             continue
+        if label:
+            ev_label = ev["human_review"].get("label") or "unclassified"
+            if ev_label != label:
+                continue
+        if direction:
+            ev_dir = ev["human_review"].get("direction") or "uncertain"
+            if ev_dir != direction:
+                continue
         filtered.append(_to_event_schema(ev))
     return filtered
 
@@ -183,6 +250,7 @@ def review_event(
             event_id=event_id,
             verified=payload.verified,
             label=payload.label,
+            direction=payload.direction,
             notes=payload.notes,
         )
     except KeyError as exc:
