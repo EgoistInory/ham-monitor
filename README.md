@@ -1,9 +1,68 @@
+<div align="center">
+
 # ham-monitor
 
-> **开源、100% 本地离线、隐私优先的室内被动声学监测与司法级存证平台**
-> 将夜间主观的“楼上又在吵”，转化为**不可篡改、多维互证、可隐私脱敏外发**的结构化证据链，配备零前端构建依赖的本地管理控制台。
+**开源、100% 本地离线、隐私优先的室内被动声学监测与司法级存证平台**
+将夜间主观的“楼上又在吵”，转化为**不可篡改、多维互证、可隐私脱敏外发**的结构化证据链。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-183B32.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-1D4E6B.svg)](pyproject.toml)
+[![Local-First](https://img.shields.io/badge/Privacy-100%25%20Local%20Offline-1F7A53.svg)](SECURITY_AND_PRIVACY.md)
+[![Zero Node Build](https://img.shields.io/badge/Web%20Console-FastAPI%20%2B%20Zero%20Build-A34F39.svg)](DESIGN.md)
+
+<br />
+
+<img src="docs/screenshots/01-overview-light.png" alt="HAM Monitor 声学存证总览（日间卷宗纸主题）" width="100%" />
+
+<sub><strong>声学存证总览（Archival Ivory 日间卷宗纸主题）</strong> — 统一 4 格聚焦指标带、SVG 频段声源环图、24 小时夜间高发分布与可点击存证台账</sub>
+
+</div>
+
+---
+
+## 界面预览（Showcase）
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/02-forensic-drawer.png">
+        <img src="docs/screenshots/02-forensic-drawer.png" alt="右侧滑出存证检验抽屉与波形寻址" width="100%" />
+      </a>
+      <p align="center"><sub><strong>右侧滑出存证检验抽屉</strong><br />点击表格任意行即刻展开：支持 HTTP 206 点击示波图寻址、默认 ≤250 Hz 脱敏试听、SHA-256 摘要与一键复核</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/05-overview-dark.png">
+        <img src="docs/screenshots/05-overview-dark.png" alt="深夜森林暗色模式" width="100%" />
+      </a>
+      <p align="center"><sub><strong>深夜值守暗色模式（Nocturnal Forest）</strong><br />专为凌晨卧室低照度核查调校的哑光深森暗色，原生适配暗黑音频控件，不刺眼、低焦虑</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/03-evidence-vault.png">
+        <img src="docs/screenshots/03-evidence-vault.png" alt="声学证据库全屏示波与不可变哈希" width="100%" />
+      </a>
+      <p align="center"><sub><strong>声学证据库（Artifacts 分栏工作台）</strong><br />双频带（20–180Hz 撞击 / 300–4kHz 人声）示波包络、脱敏/原件快速切换、不可变 FLAC SHA-256 与追加哈希链</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/04-export-dual-node.png">
+        <img src="docs/screenshots/04-export-dual-node.png" alt="隐私脱敏包导出与双节点方位对比" width="100%" />
+      </a>
+      <p align="center"><sub><strong>隐私脱敏导出 & Phase 2 双节点对比</strong><br />一键生成零绝对路径、零清晰人声的脱敏 ZIP（附 OpenTimestamps 哈希清单）及 ceiling vs room_center 能量差对照</sub></p>
+    </td>
+  </tr>
+</table>
+
+<details>
+<summary>如何一键运行演示沙箱并更新文档截图？</summary>
+
+```bash
+# 启动隔离演示沙箱（自动生成合成双频样本，绝不触碰真实 data/evidence/）
+python scripts/run_web.py --demo --port 8765
+# 浏览器打开 http://127.0.0.1:8765，按 Ctrl+K 可呼出快捷命令面板
+```
+
+</details>
 
 ---
 
