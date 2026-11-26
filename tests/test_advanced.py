@@ -298,7 +298,7 @@ def test_storage_budget_circuit_breaker_and_false_positive_purge(tmp_path: Path)
         raw_dir=str(tmp_path / "raw"),
         db_path=str(tmp_path / "ham_events.sqlite3"),
         reports_dir=str(tmp_path / "reports"),
-        max_daily_evidence_mb=0.04,  # ~40 KB daily cap triggers after first FLAC
+        max_daily_evidence_mb=0.01,  # ~10 KB daily cap triggers after first FLAC (~20 KB)
         max_evidence_mb=10.0,
         min_free_disk_mb=10.0,
     )

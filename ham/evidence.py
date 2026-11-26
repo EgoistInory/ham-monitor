@@ -195,19 +195,22 @@ class EvidenceStore:
 
     def check_storage_budget(self, event_date: str) -> Tuple[bool, str]:
         """Verify evidence directory has not hit total cap, daily cap, or low-disk floor."""
-        stats = self.get_storage_stats(event_date)
-        if stats["free_disk_mb"] < self._storage.min_free_disk_mb:
+        evidence_bytes = self._dir_size_bytes(self._evidence_dir)
+        daily_bytes = self._dir_size_bytes(self._evidence_dir / event_date)
+        free_bytes = shutil.disk_usage(self._evidence_dir).free
+
+        if free_bytes < self._storage.min_free_disk_mb * 1024 * 1024:
             return False, (
-                f"磁盘剩余空间不足 ({stats['free_disk_mb']} MB < {self._storage.min_free_disk_mb} MB)"
+                f"磁盘剩余空间不足 ({round(free_bytes / (1024 * 1024), 1)} MB < {self._storage.min_free_disk_mb} MB)"
             )
-        if stats["evidence_mb"] >= self._storage.max_evidence_mb:
+        if evidence_bytes >= self._storage.max_evidence_mb * 1024 * 1024:
             return False, (
-                f"证据库总容量已达上限 ({stats['evidence_mb']} MB / {self._storage.max_evidence_mb} MB)"
+                f"证据库总容量已达上限 ({round(evidence_bytes / (1024 * 1024), 2)} MB / {self._storage.max_evidence_mb} MB)"
             )
-        if stats["daily_evidence_mb"] >= self._storage.max_daily_evidence_mb:
+        if daily_bytes >= self._storage.max_daily_evidence_mb * 1024 * 1024:
             return False, (
                 f"今日 ({event_date}) 录证容量已达熔断上限 "
-                f"({stats['daily_evidence_mb']} MB / {self._storage.max_daily_evidence_mb} MB)"
+                f"({round(daily_bytes / (1024 * 1024), 2)} MB / {self._storage.max_daily_evidence_mb} MB)"
             )
         return True, ""
 
