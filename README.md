@@ -106,26 +106,27 @@ python scripts/run_web.py --demo --port 8765
 ## 3 分钟快速开始
 
 ```bash
-# 1. 创建虚拟环境并安装依赖（macOS 需先 brew install portaudio；Linux 需 libportaudio2 libsndfile1）
+# 1. 创建虚拟环境并安装依赖（Linux 需先装 libportaudio2 libsndfile1；macOS 仅在轮子缺失时需 brew install portaudio）
 python3 -m venv .venv
 source .venv/bin/activate        # Windows PowerShell: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
 # 2. 立即体验本地 Web 管理控制台（使用隔离演示沙箱，不触碰正式证据库）
 python scripts/run_web.py --demo
-# 浏览器打开 http://127.0.0.1:8765 （按 Ctrl+K 呼出快捷命令面板）
+# 浏览器打开 http://127.0.0.1:8765 （按 Ctrl+K 呼出快捷命令面板；若 8765 被占用可加 --port 8766）
 
-# 3. Day 1：检查麦克风并跑 60 秒现场声学探针
+# 3. Day 1：检查麦克风并跑 60 秒现场声学探针（Mac mini 等无内置麦主机需先接外置/有线耳机麦并授权）
 python scripts/probe_mic.py --list-devices
 python scripts/probe_mic.py --duration 60
 
 # 4. Day 2：前台试运行监测主循环（忽略夜间时间窗，Ctrl+C 优雅落盘）
 python scripts/run_monitor.py --ignore-schedule
-# 若使用 Mac mini/台式机 + 有线线控耳机麦（如 EarPods），推荐改用低频避工频模板（配合 caffeinate 防休眠）：
+# 若使用 Mac mini/台式机 + 有线线控耳机麦（如 EarPods），推荐改用低频避工频模板（配合 caffeinate 防休眠，锁屏/关屏不断采）：
 caffeinate -is python scripts/run_monitor.py --config config/profiles/tier0_wired_headset_mic.yaml -v
 
-# 5. Day 3：macOS 安装每晚 22:30 自动启动的 launchd 定时任务
+# 5. Day 3：macOS 安装每晚 22:30 自动启动的 launchd 定时任务（可传自定义模板路径作为参数）
 bash deploy/install_launchd.sh
+# 例如有线耳机麦：bash deploy/install_launchd.sh config/profiles/tier0_wired_headset_mic.yaml
 
 # 6. 启动正式本地管理台（连接 config/default.yaml 对应的正式证据库）
 python scripts/run_web.py

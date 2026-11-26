@@ -16,7 +16,7 @@
         <string>__PYTHON_BIN__</string>
         <string>__REPO_DIR__/scripts/run_monitor.py</string>
         <string>--config</string>
-        <string>__REPO_DIR__/config/default.yaml</string>
+        <string>__CONFIG_PATH__</string>
     </array>
 
     <!-- 每日 22:30 自动拉起，次日 07:00 由程序内 schedule 自动退出并生成日报 -->
