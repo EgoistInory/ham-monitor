@@ -583,6 +583,20 @@
               <article class="vellum-card">
                 <div class="card-head">
                   <div>
+                    <h2 class="card-title serif">存储配额与空间管家</h2>
+                    <p class="card-sub">防止证据库无限膨胀：支持总容量/单日熔断与安全回收衍生包/误报音频（绝不破坏哈希链）</p>
+                  </div>
+                  <div class="section-row-between" style="gap:8px">
+                    <button type="button" id="btn-clean-deriv" class="btn btn-ghost-bordered">清理缓存与导出包</button>
+                    <button type="button" id="btn-clean-fp" class="btn btn-ghost-bordered">清理已核误报音频</button>
+                  </div>
+                </div>
+                <div id="storage-grid" class="kv-grid mono"></div>
+              </article>
+
+              <article class="vellum-card">
+                <div class="card-head">
+                  <div>
                     <h2 class="card-title serif">当前采集配置与诊断</h2>
                     <p class="card-sub">只读摘要 · 阈值调整请编辑 YAML 后运行 <code>scripts/probe_mic.py</code></p>
                   </div>

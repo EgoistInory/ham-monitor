@@ -123,7 +123,11 @@ class NoiseMonitor:
                 )
                 completed = self._trigger.process_block(raw_chunk, metrics, block_ts)
                 if completed is not None:
-                    record = self._store.save_event(completed, ntp_synced=self._ntp_synced)
+                    try:
+                        record = self._store.save_event(completed, ntp_synced=self._ntp_synced)
+                    except RuntimeError as quota_err:
+                        logger.error("Storage quota reached; skipping disk write: %s", quota_err)
+                        continue
                     saved_records.append(record)
                     if self._sync_client is not None and self._sync_client.enabled:
                         self._sync_client.push_event(record)
@@ -139,11 +143,14 @@ class NoiseMonitor:
         finally:
             pending = self._trigger.flush()
             if pending is not None:
-                record = self._store.save_event(pending, ntp_synced=self._ntp_synced)
-                saved_records.append(record)
-                if self._sync_client is not None and self._sync_client.enabled:
-                    self._sync_client.push_event(record)
-                logger.info("Flushed final evidence %s on shutdown", record["event_id"])
+                try:
+                    record = self._store.save_event(pending, ntp_synced=self._ntp_synced)
+                    saved_records.append(record)
+                    if self._sync_client is not None and self._sync_client.enabled:
+                        self._sync_client.push_event(record)
+                    logger.info("Flushed final evidence %s on shutdown", record["event_id"])
+                except RuntimeError as quota_err:
+                    logger.error("Storage quota reached on shutdown flush: %s", quota_err)
             self._source.stop()
 
         return saved_records

@@ -128,4 +128,4 @@ python scripts/export_share.py --date 2026-11-25 --include-lowpass-audio
 | 整晚 0 触发（但实际很吵） | `low_min_dbfs` / `high_min_dbfs` 设得太高，或系统开启了语音降噪 | 重跑 `probe_mic.py` 检查真实底噪，下调阈值 5–8 dB 并确认系统降噪已关闭 |
 | 误报过多（空调/风声频触发） | `low_delta_db` 偏低或设备靠近空调/风扇 | 将 `low_delta_db` 提高至 `14–16 dB`，或将 `min_active_sec` 提高至 `1.0s` |
 | 音频流中途断开 | USB 麦松动或系统短暂休眠 | `SoundDeviceAudioSource` 已内置每 3 秒自动重连；检查 `launchd_stderr.log` 并确认启用 `caffeinate -is` |
-| 担心硬盘写满 | 仅命中事件写无损 FLAC（每分钟约 2–3 MB）；`data/raw/` 超 7 天自动清理 | 每月执行一次异地只读备份（U 盘/加密移动硬盘）备份 `data/evidence/` 与 `data/ham_events.sqlite3` |
+| 担心硬盘写满 | 仅命中事件写无损 FLAC（每分钟约 2–3 MB）；`raw/` 与 `exports/` 超 7 天自动清理；并内置 `max_evidence_mb`（5GB）/ `max_daily_evidence_mb`（500MB）/ `min_free_disk_mb`（1GB）三重熔断 | 在 Web 控制台「存储配额与空间管家」一键清理衍生包或已复核的本户/街噪误报音频，每月异地只读备份一次 `data/evidence/` 与 SQLite |

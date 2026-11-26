@@ -43,6 +43,10 @@ storage:
   db_path: "data/ham_events.sqlite3"
   reports_dir: "data/reports"
   raw_retention_days: 7         # 仅自动清理 raw_dir 中超期文件
+  exports_retention_days: 7     # 自动清理 exports/ 下超期衍生脱敏分享包
+  max_evidence_mb: 5120.0       # 证据库总容量硬上限 (MB，默认 5 GB)
+  max_daily_evidence_mb: 500.0  # 单日录证容量熔断上限 (MB，防误触发爆盘)
+  min_free_disk_mb: 1024.0      # 系统磁盘最低保留空间 (MB，默认 1 GB)
   audio_format: "FLAC"          # 无损单声道 16-bit FLAC
 
 # 分布式边缘节点自动回传配置（单机一体模式保持 enabled: false 即可）

@@ -49,6 +49,9 @@ from ham.web.schemas import (
     ReviewUpdateRequest,
     ShareExportRequest,
     ShareExportResponse,
+    StorageCleanupRequest,
+    StorageCleanupResponse,
+    StorageStatsResponse,
     SystemConfigResponse,
     WaveformResponse,
 )
@@ -621,6 +624,30 @@ def ingest_raw_audio_upload(
         imported_count=len(saved),
         event_ids=[r["event_id"] for r in saved],
     )
+
+
+@api_router.get("/storage")
+def get_storage_stats(
+    state: StateDep,
+    date: Annotated[Optional[str], Query()] = None,
+) -> StorageStatsResponse:
+    """Return real-time disk usage and configured safety quota limits."""
+    return StorageStatsResponse(**state.store.get_storage_stats(date_str=date))
+
+
+@api_router.post("/storage/cleanup")
+def run_storage_cleanup(
+    payload: StorageCleanupRequest,
+    state: StateDep,
+) -> StorageCleanupResponse:
+    """Reclaim derived/temp storage and optionally purge user-verified false positives."""
+    res = state.store.cleanup_derivatives_and_false_positives(
+        purge_exports=payload.purge_exports,
+        purge_raw=payload.purge_raw,
+        purge_false_positives=payload.purge_false_positives,
+    )
+    stats = StorageStatsResponse(**state.store.get_storage_stats())
+    return StorageCleanupResponse(**res, stats=stats)
 
 
 @api_router.get("/config")

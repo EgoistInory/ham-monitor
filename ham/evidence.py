@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import shutil
 import sqlite3
 import time
 from datetime import datetime
@@ -14,7 +16,11 @@ from ham.config import DeviceProfile, StorageConfig
 from ham.taxonomy import get_category_label, get_direction_label
 from ham.trigger import CompletedEvent
 
+logger = logging.getLogger(__name__)
+
 GENESIS_CHAIN_HASH = "0" * 64
+PURGEABLE_LABELS = ("self_noise", "street_noise", "street_traffic")
+PURGEABLE_DIRECTIONS = ("self_household",)
 
 VALID_CORROBORATION_TYPES = (
     "property_notice",
@@ -114,7 +120,8 @@ class EvidenceStore:
                     human_verified INTEGER NOT NULL DEFAULT 0,
                     human_label TEXT,
                     human_direction TEXT NOT NULL DEFAULT '',
-                    human_notes TEXT NOT NULL DEFAULT ''
+                    human_notes TEXT NOT NULL DEFAULT '',
+                    storage_state TEXT NOT NULL DEFAULT 'active'
                 )
                 """
             )
@@ -126,6 +133,8 @@ class EvidenceStore:
                 conn.execute("ALTER TABLE events ADD COLUMN chain_hash TEXT NOT NULL DEFAULT ''")
             if "human_direction" not in cols:
                 conn.execute("ALTER TABLE events ADD COLUMN human_direction TEXT NOT NULL DEFAULT ''")
+            if "storage_state" not in cols:
+                conn.execute("ALTER TABLE events ADD COLUMN storage_state TEXT NOT NULL DEFAULT 'active'")
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_events_date ON events(event_date)")
 
@@ -155,6 +164,53 @@ class EvidenceStore:
             return GENESIS_CHAIN_HASH
         return str(row["chain_hash"])
 
+    def _dir_size_bytes(self, directory: Path) -> int:
+        if not directory.exists():
+            return 0
+        return sum(p.stat().st_size for p in directory.rglob("*") if p.is_file())
+
+    def get_storage_stats(self, date_str: Optional[str] = None) -> Dict[str, Any]:
+        """Compute current disk usage across evidence, raw, exports, DB, and disk free space."""
+        target_date = date_str or datetime.now().astimezone().strftime("%Y-%m-%d")
+        evidence_bytes = self._dir_size_bytes(self._evidence_dir)
+        daily_bytes = self._dir_size_bytes(self._evidence_dir / target_date)
+        raw_bytes = self._dir_size_bytes(self._raw_dir)
+        exports_dir = Path(self._storage.base_dir) / "exports"
+        exports_bytes = self._dir_size_bytes(exports_dir)
+        db_bytes = self._db_path.stat().st_size if self._db_path.exists() else 0
+        free_bytes = shutil.disk_usage(self._evidence_dir).free
+
+        return {
+            "evidence_mb": round(evidence_bytes / (1024 * 1024), 2),
+            "daily_evidence_mb": round(daily_bytes / (1024 * 1024), 2),
+            "raw_mb": round(raw_bytes / (1024 * 1024), 2),
+            "exports_mb": round(exports_bytes / (1024 * 1024), 2),
+            "db_mb": round(db_bytes / (1024 * 1024), 2),
+            "free_disk_mb": round(free_bytes / (1024 * 1024), 1),
+            "max_evidence_mb": self._storage.max_evidence_mb,
+            "max_daily_evidence_mb": self._storage.max_daily_evidence_mb,
+            "min_free_disk_mb": self._storage.min_free_disk_mb,
+            "target_date": target_date,
+        }
+
+    def check_storage_budget(self, event_date: str) -> Tuple[bool, str]:
+        """Verify evidence directory has not hit total cap, daily cap, or low-disk floor."""
+        stats = self.get_storage_stats(event_date)
+        if stats["free_disk_mb"] < self._storage.min_free_disk_mb:
+            return False, (
+                f"磁盘剩余空间不足 ({stats['free_disk_mb']} MB < {self._storage.min_free_disk_mb} MB)"
+            )
+        if stats["evidence_mb"] >= self._storage.max_evidence_mb:
+            return False, (
+                f"证据库总容量已达上限 ({stats['evidence_mb']} MB / {self._storage.max_evidence_mb} MB)"
+            )
+        if stats["daily_evidence_mb"] >= self._storage.max_daily_evidence_mb:
+            return False, (
+                f"今日 ({event_date}) 录证容量已达熔断上限 "
+                f"({stats['daily_evidence_mb']} MB / {self._storage.max_daily_evidence_mb} MB)"
+            )
+        return True, ""
+
     def save_event(
         self,
         event: CompletedEvent,
@@ -164,6 +220,9 @@ class EvidenceStore:
         """Persist raw PCM as lossless FLAC, hash & chain it, write sidecar JSON, index in SQLite."""
         profile = profile_override or self._profile
         event_date = event.trigger_time.strftime("%Y-%m-%d")
+        allowed, reason = self.check_storage_budget(event_date)
+        if not allowed:
+            raise RuntimeError(f"存储配额熔断，已拒绝继续写入新音频: {reason}")
         ts_slug = event.trigger_time.strftime("%Y%m%d_%H%M%S")
         event_id = f"{ts_slug}_{profile.node_id}"
 
@@ -296,6 +355,9 @@ class EvidenceStore:
 
         trigger_dt = datetime.fromisoformat(str(metadata["trigger_time"]))
         event_date = trigger_dt.strftime("%Y-%m-%d")
+        allowed, reason = self.check_storage_budget(event_date)
+        if not allowed:
+            raise RuntimeError(f"存储配额熔断，已拒绝接收远程音频: {reason}")
         day_dir = self._evidence_dir / event_date
         day_dir.mkdir(parents=True, exist_ok=True)
 
@@ -554,6 +616,9 @@ class EvidenceStore:
             if raw["chain_hash"] != recomputed:
                 errors.append(f"{eid}: chain_hash corrupted")
             if verify_files:
+                if ev.get("storage_state", "active") == "purged_false_positive":
+                    expected_prev = raw["chain_hash"]
+                    continue
                 flac_path = Path(raw["file"])
                 if not flac_path.exists():
                     errors.append(f"{eid}: missing FLAC file {flac_path}")
@@ -653,22 +718,103 @@ class EvidenceStore:
         return report_path
 
     def cleanup_old_raw(self) -> int:
-        """Delete temporary files older than raw_retention_days in raw_dir ONLY.
+        """Delete temporary files older than raw_retention_days in raw_dir and expired exports.
 
         NEVER touches evidence_dir.
         """
-        cutoff = time.time() - self._storage.raw_retention_days * 86400
+        cutoff_raw = time.time() - self._storage.raw_retention_days * 86400
         removed = 0
         for p in self._raw_dir.rglob("*"):
-            if p.is_file() and p.stat().st_mtime < cutoff:
+            if p.is_file() and p.stat().st_mtime < cutoff_raw:
                 p.unlink()
                 removed += 1
+
+        exports_dir = Path(self._storage.base_dir) / "exports"
+        if exports_dir.exists():
+            cutoff_exp = time.time() - self._storage.exports_retention_days * 86400
+            for p in exports_dir.rglob("*"):
+                if p.is_file() and p.stat().st_mtime < cutoff_exp:
+                    p.unlink()
+                    removed += 1
+            # Remove empty export subdirectories
+            for d in sorted(exports_dir.rglob("*"), reverse=True):
+                if d.is_dir() and not any(d.iterdir()):
+                    d.rmdir()
         return removed
+
+    def cleanup_derivatives_and_false_positives(
+        self,
+        purge_exports: bool = True,
+        purge_raw: bool = True,
+        purge_false_positives: bool = False,
+    ) -> Dict[str, Any]:
+        """Safely reclaim disk space without breaking the evidence hash chain.
+
+        - `exports/` and `raw/` are always safe to purge (derived / temporary).
+        - In `evidence/`, ONLY audio explicitly verified by the user as
+          `self_household` / `self_noise` / `street_noise` / `street_traffic`
+          may be purged, marking `storage_state = 'purged_false_positive'` so
+          the cryptographic hash chain remains valid and auditable.
+        """
+        reclaimed_bytes = 0
+        removed_files = 0
+        purged_events = 0
+
+        if purge_raw and self._raw_dir.exists():
+            for p in self._raw_dir.rglob("*"):
+                if p.is_file():
+                    reclaimed_bytes += p.stat().st_size
+                    p.unlink()
+                    removed_files += 1
+
+        exports_dir = Path(self._storage.base_dir) / "exports"
+        if purge_exports and exports_dir.exists():
+            for p in exports_dir.rglob("*"):
+                if p.is_file():
+                    reclaimed_bytes += p.stat().st_size
+                    p.unlink()
+                    removed_files += 1
+            for d in sorted(exports_dir.rglob("*"), reverse=True):
+                if d.is_dir() and not any(d.iterdir()):
+                    d.rmdir()
+
+        if purge_false_positives:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT event_id, evidence_file, human_verified, human_label, human_direction, storage_state
+                    FROM events
+                    WHERE human_verified = 1 AND storage_state = 'active'
+                    """
+                ).fetchall()
+                for row in rows:
+                    is_fp = (
+                        row["human_label"] in PURGEABLE_LABELS
+                        or row["human_direction"] in PURGEABLE_DIRECTIONS
+                    )
+                    if not is_fp:
+                        continue
+                    flac_path = Path(row["evidence_file"])
+                    if flac_path.exists():
+                        reclaimed_bytes += flac_path.stat().st_size
+                        flac_path.unlink()
+                    conn.execute(
+                        "UPDATE events SET storage_state = 'purged_false_positive' WHERE event_id = ?",
+                        (row["event_id"],),
+                    )
+                    purged_events += 1
+
+        return {
+            "removed_files": removed_files,
+            "purged_false_positive_events": purged_events,
+            "reclaimed_mb": round(reclaimed_bytes / (1024 * 1024), 2),
+        }
 
     @staticmethod
     def _row_to_record(row: sqlite3.Row) -> Dict[str, Any]:
         return {
             "event_id": row["event_id"],
+            "storage_state": row["storage_state"] if "storage_state" in row.keys() else "active",
             "raw_evidence": {
                 "file": row["evidence_file"],
                 "sha256": row["sha256"],

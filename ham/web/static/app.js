@@ -847,11 +847,23 @@ async function loadCorroborations() {
 
 async function loadCorrelateAndConfig() {
   const q = state.selectedDate ? `?date=${encodeURIComponent(state.selectedDate)}` : "";
-  const [pairs, cfg, nodes] = await Promise.all([
+  const [pairs, cfg, nodes, storage] = await Promise.all([
     apiFetch(`/api/correlate${q}`),
     apiFetch("/api/config"),
     apiFetch("/api/nodes"),
+    apiFetch(`/api/storage${q}`),
   ]);
+
+  const storageGrid = $("storage-grid");
+  if (storageGrid) {
+    const pctTotal = Math.min(100, Math.round((storage.evidence_mb / Math.max(1, storage.max_evidence_mb)) * 100));
+    storageGrid.innerHTML = `
+      <div><span class="meta-label">证据库已用 / 上限</span><strong>${storage.evidence_mb} MB / ${storage.max_evidence_mb} MB (${pctTotal}%)</strong></div>
+      <div><span class="meta-label">今日录证 / 日熔断线</span><strong>${storage.daily_evidence_mb} MB / ${storage.max_daily_evidence_mb} MB</strong></div>
+      <div><span class="meta-label">衍生分享包 / 探针缓存</span><strong>${storage.exports_mb} MB / ${storage.raw_mb} MB</strong></div>
+      <div><span class="meta-label">磁盘剩余 / 保护底线</span><strong>${(storage.free_disk_mb / 1024).toFixed(2)} GB / ${(storage.min_free_disk_mb / 1024).toFixed(2)} GB</strong></div>
+    `;
+  }
 
   const authBadge = $("ingest-auth-badge");
   if (authBadge) {
@@ -1173,6 +1185,28 @@ function bindEvents() {
   $("btn-topbar-export").addEventListener("click", () => { switchTab("export"); triggerShareExport(); });
   $("btn-goto-evidence").addEventListener("click", () => switchTab("evidence"));
   $("btn-refresh-correlate").addEventListener("click", loadCorrelateAndConfig);
+
+  const runStorageCleanup = async (purgeFp) => {
+    try {
+      const res = await apiFetch("/api/storage/cleanup", {
+        method: "POST",
+        body: JSON.stringify({
+          purge_exports: true,
+          purge_raw: true,
+          purge_false_positives: purgeFp,
+        }),
+      });
+      showToast(
+        `已清理 ${res.removed_files} 个临时/导出文件及 ${res.purged_false_positive_events} 条误报音频，释放 ${res.reclaimed_mb} MB`,
+        "success"
+      );
+      await loadCorrelateAndConfig();
+    } catch (err) {
+      showToast(`清理失败: ${err.message}`, "error");
+    }
+  };
+  $("btn-clean-deriv").addEventListener("click", () => runStorageCleanup(false));
+  $("btn-clean-fp").addEventListener("click", () => runStorageCleanup(true));
 
   $("exp-cutoff").addEventListener("input", (e) => { $("exp-cutoff-val").textContent = `${e.target.value} Hz`; });
   $("exp-include-audio").addEventListener("change", (e) => { $("cutoff-slider-wrap").style.opacity = e.target.checked ? "1" : "0.45"; });

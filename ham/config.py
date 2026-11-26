@@ -77,6 +77,10 @@ class StorageConfig:
     db_path: str = "data/ham_events.sqlite3"
     reports_dir: str = "data/reports"
     raw_retention_days: int = 7
+    exports_retention_days: int = 7
+    max_evidence_mb: float = 5120.0       # 证据库总容量硬上限 (默认 5 GB)
+    max_daily_evidence_mb: float = 500.0  # 单日录证上限 (默认 500 MB，防阈值过低连续误触)
+    min_free_disk_mb: float = 1024.0      # 所在磁盘最低保留可用空间 (默认 1 GB)
     audio_format: str = "FLAC"
 
 

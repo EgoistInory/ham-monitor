@@ -153,7 +153,18 @@ def test_web_chain_corroboration_correlate_and_export(tmp_path: Path) -> None:
     bad = client.get("/api/exports/..%5Csecret.zip")
     assert bad.status_code in (400, 404)
 
-    # Read-only config endpoint
+    # Read-only config & storage stats + cleanup endpoints
     cfg = client.get("/api/config")
     assert cfg.status_code == 200
     assert cfg.json()["demo_mode"] is True
+
+    st = client.get("/api/storage")
+    assert st.status_code == 200
+    assert st.json()["exports_mb"] > 0
+
+    cl = client.post(
+        "/api/storage/cleanup",
+        json={"purge_exports": True, "purge_raw": True, "purge_false_positives": False},
+    )
+    assert cl.status_code == 200
+    assert cl.json()["removed_files"] >= 1

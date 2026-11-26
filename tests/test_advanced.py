@@ -287,3 +287,37 @@ storage:
     assert records[0]["raw_evidence"]["node_id"] == "android_ceiling"
     assert records[0]["raw_evidence"]["location_tag"] == "ceiling"
     assert records[0]["algo_metrics"]["trigger_band"] == "low_impact_20_180hz"
+
+
+def test_storage_budget_circuit_breaker_and_false_positive_purge(tmp_path: Path) -> None:
+    import pytest
+
+    storage = StorageConfig(
+        base_dir=str(tmp_path),
+        evidence_dir=str(tmp_path / "evidence"),
+        raw_dir=str(tmp_path / "raw"),
+        db_path=str(tmp_path / "ham_events.sqlite3"),
+        reports_dir=str(tmp_path / "reports"),
+        max_daily_evidence_mb=0.04,  # ~40 KB daily cap triggers after first FLAC
+        max_evidence_mb=10.0,
+        min_free_disk_mb=10.0,
+    )
+    store = EvidenceStore(storage, DeviceProfile())
+    t1 = datetime(2026, 11, 26, 23, 10, 0, tzinfo=timezone.utc)
+    r1 = store.save_event(_dummy_event(t1))
+
+    # Second event on same date must trip the daily storage circuit breaker
+    with pytest.raises(RuntimeError, match="存储配额熔断"):
+        store.save_event(_dummy_event(t1 + timedelta(minutes=5)))
+
+    # Mark r1 as verified self_household noise and purge it -> frees space & keeps chain valid!
+    store.update_human_review(
+        r1["event_id"], verified=True, label="self_noise", direction="self_household"
+    )
+    res = store.cleanup_derivatives_and_false_positives(purge_false_positives=True)
+    assert res["purged_false_positive_events"] == 1
+    assert not Path(r1["raw_evidence"]["file"]).exists()
+
+    ok, errors = store.verify_chain(verify_files=True)
+    assert ok is True
+    assert errors == []

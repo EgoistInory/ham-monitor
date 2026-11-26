@@ -215,3 +215,29 @@ class IngestUploadResponse(BaseModel):
     location_tag: str
     imported_count: int
     event_ids: list[str]
+
+
+class StorageStatsResponse(BaseModel):
+    evidence_mb: float
+    daily_evidence_mb: float
+    raw_mb: float
+    exports_mb: float
+    db_mb: float
+    free_disk_mb: float
+    max_evidence_mb: float
+    max_daily_evidence_mb: float
+    min_free_disk_mb: float
+    target_date: str
+
+
+class StorageCleanupRequest(BaseModel):
+    purge_exports: bool = True
+    purge_raw: bool = True
+    purge_false_positives: bool = False
+
+
+class StorageCleanupResponse(BaseModel):
+    removed_files: int
+    purged_false_positive_events: int
+    reclaimed_mb: float
+    stats: StorageStatsResponse
