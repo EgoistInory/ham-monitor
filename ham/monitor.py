@@ -44,12 +44,14 @@ class NoiseMonitor:
         preprocessor: Optional[AnalysisPreprocessor] = None,
         ignore_schedule: bool = False,
         ntp_synced: bool = False,
+        sync_client: Optional[Any] = None,
     ) -> None:
         self._cfg = config
         self._source = source
         self._store = store
         self._ignore_schedule = ignore_schedule
         self._ntp_synced = ntp_synced
+        self._sync_client = sync_client
         self._stop_requested = False
 
         self._analyzer = DualBandAnalyzer(
@@ -90,6 +92,8 @@ class NoiseMonitor:
 
         saved_records: List[Dict[str, Any]] = []
         self._store.cleanup_old_raw()
+        if self._sync_client is not None and self._sync_client.enabled:
+            self._sync_client.flush_queue(self._store)
         self._source.start()
         logger.info(
             "NoiseMonitor started (node=%s, schedule=%s-%s, ignore_schedule=%s)",
@@ -121,6 +125,9 @@ class NoiseMonitor:
                 if completed is not None:
                     record = self._store.save_event(completed, ntp_synced=self._ntp_synced)
                     saved_records.append(record)
+                    if self._sync_client is not None and self._sync_client.enabled:
+                        self._sync_client.push_event(record)
+                        self._sync_client.flush_queue(self._store)
                     logger.info(
                         "Saved evidence %s | band=%s | dur=%.1fs | peak=%.1f dBFS | delta=+%.1f dB",
                         record["event_id"],
@@ -134,6 +141,8 @@ class NoiseMonitor:
             if pending is not None:
                 record = self._store.save_event(pending, ntp_synced=self._ntp_synced)
                 saved_records.append(record)
+                if self._sync_client is not None and self._sync_client.enabled:
+                    self._sync_client.push_event(record)
                 logger.info("Flushed final evidence %s on shutdown", record["event_id"])
             self._source.stop()
 

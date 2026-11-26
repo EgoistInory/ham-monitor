@@ -191,3 +191,27 @@ class SystemConfigResponse(BaseModel):
     post_roll_sec: float
     raw_retention_days: int
     demo_mode: bool
+    ingest_token_required: bool = False
+
+
+class NodeSummarySchema(BaseModel):
+    node_id: str
+    location_tag: str
+    event_count: int
+    last_seen: str
+    calibrated: bool
+
+
+class IngestEventResponse(BaseModel):
+    status: Literal["created", "duplicate"]
+    event_id: str
+    sha256: str
+    chain_hash: str
+
+
+class IngestUploadResponse(BaseModel):
+    status: str
+    node_id: str
+    location_tag: str
+    imported_count: int
+    event_ids: list[str]

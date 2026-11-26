@@ -44,3 +44,10 @@ storage:
   reports_dir: "data/reports"
   raw_retention_days: 7         # 仅自动清理 raw_dir 中超期文件
   audio_format: "FLAC"          # 无损单声道 16-bit FLAC
+
+# 分布式边缘节点自动回传配置（单机一体模式保持 enabled: false 即可）
+sync:
+  enabled: false
+  server_url: ""                # 中心服务端局域网地址，例如 "http://192.168.1.10:8765"
+  token: ""                     # 对应中心端 --ingest-token 或 HAM_INGEST_TOKEN
+  timeout_sec: 30.0

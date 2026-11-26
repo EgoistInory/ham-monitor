@@ -847,10 +847,33 @@ async function loadCorroborations() {
 
 async function loadCorrelateAndConfig() {
   const q = state.selectedDate ? `?date=${encodeURIComponent(state.selectedDate)}` : "";
-  const [pairs, cfg] = await Promise.all([
+  const [pairs, cfg, nodes] = await Promise.all([
     apiFetch(`/api/correlate${q}`),
     apiFetch("/api/config"),
+    apiFetch("/api/nodes"),
   ]);
+
+  const authBadge = $("ingest-auth-badge");
+  if (authBadge) {
+    authBadge.textContent = cfg.ingest_token_required ? "局域网令牌保护" : "本机直连";
+    authBadge.className = "pill-tag " + (cfg.ingest_token_required ? "pill-amber" : "pill-ok");
+  }
+
+  const nodesStrip = $("nodes-strip");
+  if (nodesStrip) {
+    nodesStrip.innerHTML = nodes.length
+      ? nodes
+          .map(
+            (n) => `
+            <span class="node-chip mono">
+              <span class="live-dot"></span>
+              <strong>${escapeHtml(n.node_id)}</strong>
+              <span style="color:var(--ink-muted)">${escapeHtml(n.location_tag)} · ${n.event_count} 条</span>
+            </span>`
+          )
+          .join("")
+      : `<span class="micro-caption">尚无采集节点入库记录</span>`;
+  }
 
   const tableWrap = $("correlate-table-wrap");
   if (!pairs.length) {
@@ -999,6 +1022,62 @@ async function triggerShareExport() {
   }
 }
 
+async function handleAudioUpload(e) {
+  e.preventDefault();
+  const fileInput = $("upl-file");
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) {
+    showToast("请先选择要导入的音频文件", "error");
+    return;
+  }
+  const startVal = $("upl-start-time").value;
+  if (!startVal) {
+    showToast("请填写录音开始时间", "error");
+    return;
+  }
+
+  const btn = $("btn-run-upload");
+  btn.disabled = true;
+  $("upl-status-text").textContent = "正在解码分析并写入哈希链，请稍候...";
+
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("start_time", startVal.length === 16 ? `${startVal}:00` : startVal);
+    fd.append("node_id", $("upl-node-id").value.trim() || "phone_ceiling");
+    fd.append("location_tag", $("upl-location").value || "ceiling");
+
+    const headers = {};
+    const token = $("upl-token").value.trim();
+    if (token) headers["X-HAM-Token"] = token;
+
+    const res = await fetch("/api/ingest/upload", { method: "POST", headers, body: fd });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    $("upl-status-text").textContent = `导入完成：节点 ${data.node_id} 共提取 ${data.imported_count} 条超标事件`;
+    showToast(`音频分析完成，新增 ${data.imported_count} 条存证事件`, "success");
+    fileInput.value = "";
+    await refreshAll();
+  } catch (err) {
+    $("upl-status-text").textContent = `导入失败：${err.message}`;
+    showToast(`上传导入失败: ${err.message}`, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function initUploadDefaultTime() {
+  const inp = $("upl-start-time");
+  if (!inp || inp.value) return;
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const pad = (n) => String(n).padStart(2, "0");
+  inp.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T23:00`;
+}
+
 async function refreshAll() {
   await Promise.all([
     loadOverview(),
@@ -1090,6 +1169,7 @@ function bindEvents() {
   $("btn-verify-chain-top").addEventListener("click", handleVerifyChain);
   $("corroboration-form").addEventListener("submit", handleAddCorroboration);
   $("export-form").addEventListener("submit", (e) => { e.preventDefault(); triggerShareExport(); });
+  $("upload-form").addEventListener("submit", handleAudioUpload);
   $("btn-topbar-export").addEventListener("click", () => { switchTab("export"); triggerShareExport(); });
   $("btn-goto-evidence").addEventListener("click", () => switchTab("evidence"));
   $("btn-refresh-correlate").addEventListener("click", loadCorrelateAndConfig);
@@ -1100,6 +1180,7 @@ function bindEvents() {
 
 async function bootstrap() {
   initTheme();
+  initUploadDefaultTime();
   bindEvents();
   try {
     await loadTaxonomy();

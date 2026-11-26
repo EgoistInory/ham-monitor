@@ -81,6 +81,16 @@ class StorageConfig:
 
 
 @dataclass(frozen=True)
+class SyncConfig:
+    """Edge-First Store-and-Forward remote sync config (disabled in single-host mode)."""
+
+    enabled: bool = False
+    server_url: str = ""
+    token: str = ""
+    timeout_sec: float = 30.0
+
+
+@dataclass(frozen=True)
 class AppConfig:
     node: DeviceProfile = field(default_factory=DeviceProfile)
     audio: AudioConfig = field(default_factory=AudioConfig)
@@ -88,6 +98,7 @@ class AppConfig:
     dsp: DSPConfig = field(default_factory=DSPConfig)
     trigger: TriggerConfig = field(default_factory=TriggerConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
+    sync: SyncConfig = field(default_factory=SyncConfig)
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -102,6 +113,7 @@ def load_config(path: str | Path) -> AppConfig:
     dsp_raw = raw.get("dsp", {})
     trigger_raw = raw.get("trigger", {})
     storage_raw = raw.get("storage", {})
+    sync_raw = raw.get("sync", {})
 
     if "low_band_hz" in dsp_raw:
         dsp_raw = {**dsp_raw, "low_band_hz": tuple(dsp_raw["low_band_hz"])}
@@ -115,4 +127,5 @@ def load_config(path: str | Path) -> AppConfig:
         dsp=DSPConfig(**dsp_raw),
         trigger=TriggerConfig(**trigger_raw),
         storage=StorageConfig(**storage_raw),
+        sync=SyncConfig(**sync_raw),
     )

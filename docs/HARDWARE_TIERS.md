@@ -22,17 +22,18 @@
   - **老旧笔记本长期插电防鼓包**：macOS 笔记本可使用 AlDente 等工具将充电上限锁死在 **50%–60%**；Windows 笔记本在厂商电源管理中开启“养护模式（60%上限）”。
 - **摆放建议**：尽量靠近主要受扰卧室区域，机身下方垫一本厚书或折叠毛巾，避免桌面风扇/硬盘共振传导至内置麦。
 
-### 方案 0B：仅有一台闲置安卓手机（无电脑全天候开机）
-1. 将旧安卓机开启飞行模式（仅留 Wi-Fi 同步网络时间 NTP），底部垫一块**厚海绵或折叠毛巾**（隔绝柜体共振），屏幕朝上或麦克风孔朝上放在衣柜顶接近天花板的位置。
-2. 使用任意支持无损 WAV/FLAC 或高码率 OGG 的本地定时录音 App（或 Termux + `termux-microphone-record`）录制夜间音频。
-3. 次日将音频传回电脑，使用本项目的离线导入管线自动切片并纳入哈希链：
-   ```bash
-   python scripts/import_audio.py \
-     --input night_20261125.wav \
-     --start-time "2026-11-25T23:00:00+08:00" \
-     --node-id android_ceiling \
-     --location-tag ceiling
-   ```
+### 方案 0B：闲置手机接入（iPhone / 安卓，Edge-First 边缘自治模式）
+
+> **架构原则（为什么不做“服务端检测到噪声后再远程唤醒手机录音”？）**
+> 楼上突发重砸或尖叫只有几秒，若等主节点判定后再经 Wi-Fi 远程唤醒手机开麦，起爆瞬间与前 15 秒上下文必定丢失。本项目采用安防/地震台网标准的 **Edge-First Store-and-Forward（边缘先本地保底 + 可靠回传中心端）** 架构：
+
+1. **手机端（iPhone / 安卓零折腾直传）**：
+   - 将旧手机开飞行模式（仅留 Wi-Fi 校时）、底部垫厚海绵放衣柜顶（`ceiling`），用系统录音（如 iPhone 语音备忘录 `.m4a` 或无损 WAV App）整晚本地录存；
+   - 次日连同一局域网 Wi-Fi，在中心电脑运行 `python scripts/run_web.py --host 0.0.0.0`（自动生成安全接入令牌 `X-HAM-Token`）；
+   - 手机或电脑浏览器打开 Web 控制台 **「脱敏导出与双节点 → 手机/外部设备音频直传导入」**，直接上传音频（`.wav/.flac/.ogg/.mp3` 原生解码，`.m4a` 装有 `ffmpeg` 自动解码），后端自动切分超标事件并纳入哈希链；也可继续用命令行 [import_audio.py](../scripts/import_audio.py) 离线导入。
+2. **第二台电脑 / 树莓派 / 安卓 Termux（全自动边缘同步节点）**：
+   - 在边缘机 `config/default.yaml` 中开启 `sync.enabled: true` 并填好中心服务端 `server_url` 与 `token`；
+   - 边缘机触发事件时**先在本地无损落盘 FLAC + SHA-256**，再异步推送至中心端 `POST /api/ingest/event`（校验 `client_sha256` 比特级一致 + 幂等去重）；若 Wi-Fi 断线，自动写入本地重试队列 `data/sync_queue.json`，网络恢复后自动补传。
 
 ---
 

@@ -25,6 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from ham.audio_io import load_mono_audio
 from ham.capture import SyntheticAudioSource
 from ham.config import load_config
 from ham.evidence import EvidenceStore
@@ -39,9 +40,7 @@ def import_audio_file(
     location_tag: str | None = None,
 ) -> list[dict]:
     cfg = load_config(config_path)
-    data, sr = sf.read(str(input_path), dtype="float32")
-    if data.ndim > 1:
-        data = data[:, 0]
+    data, sr = load_mono_audio(input_path)
 
     new_node = dataclasses.replace(
         cfg.node,

@@ -270,6 +270,132 @@ class EvidenceStore:
         json_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
         return record
 
+    def ingest_remote_flac(
+        self,
+        event_id: str,
+        flac_bytes: bytes,
+        client_sha256: str,
+        metadata: Dict[str, Any],
+    ) -> Tuple[Dict[str, Any], bool]:
+        """Atomically ingest a pre-sliced lossless FLAC from a remote edge node.
+
+        Verifies bit-for-bit SHA-256 match against client_sha256, preserves the
+        exact FLAC bytes without re-encoding, enforces idempotency on event_id,
+        and appends into the central hash chain.
+        Returns (record, created_bool).
+        """
+        actual_sha = hashlib.sha256(flac_bytes).hexdigest()
+        if client_sha256 and actual_sha != client_sha256:
+            raise ValueError(
+                f"SHA-256 mismatch for {event_id}: expected {client_sha256}, got {actual_sha}"
+            )
+
+        existing = self.get_event(event_id)
+        if existing is not None:
+            return existing, False
+
+        trigger_dt = datetime.fromisoformat(str(metadata["trigger_time"]))
+        event_date = trigger_dt.strftime("%Y-%m-%d")
+        day_dir = self._evidence_dir / event_date
+        day_dir.mkdir(parents=True, exist_ok=True)
+
+        # Sanitize event_id for safe filename
+        safe_id = "".join(ch for ch in event_id if ch.isalnum() or ch in ("_", "-"))
+        if not safe_id:
+            raise ValueError("Invalid event_id")
+
+        flac_path = day_dir / f"{safe_id}.flac"
+        flac_path.write_bytes(flac_bytes)
+
+        # Validate FLAC readability & compute duration from actual audio frames
+        info = sf.info(str(flac_path))
+        duration_sec = round(float(info.frames) / float(info.samplerate), 3) if info.samplerate else 0.0
+        sample_rate = int(metadata.get("sample_rate") or info.samplerate)
+        trigger_iso = trigger_dt.isoformat()
+
+        with self._connect() as conn:
+            prev_hash = self._get_latest_chain_hash(conn)
+            chain_hash = compute_chain_hash(prev_hash, safe_id, actual_sha, trigger_iso)
+
+            record: Dict[str, Any] = {
+                "event_id": safe_id,
+                "raw_evidence": {
+                    "file": str(flac_path.as_posix()),
+                    "sha256": actual_sha,
+                    "prev_chain_hash": prev_hash,
+                    "chain_hash": chain_hash,
+                    "sample_rate": sample_rate,
+                    "channels": int(info.channels or 1),
+                    "ntp_synced": bool(metadata.get("ntp_synced", False)),
+                    "device_calibrated": bool(metadata.get("device_calibrated", False)),
+                    "node_id": str(metadata.get("node_id") or "edge_node"),
+                    "location_tag": str(metadata.get("location_tag") or "unknown"),
+                    "start_time": str(metadata.get("start_time") or trigger_iso),
+                    "end_time": str(metadata.get("end_time") or trigger_iso),
+                    "trigger_time": trigger_iso,
+                },
+                "algo_metrics": {
+                    "trigger_band": str(metadata.get("trigger_band") or "low_impact_20_180hz"),
+                    "peak_dbfs": float(metadata.get("peak_dbfs", -20.0)),
+                    "baseline_dbfs": float(metadata.get("baseline_dbfs", -50.0)),
+                    "delta_db": float(metadata.get("delta_db", 15.0)),
+                    "low_peak_dbfs": float(metadata.get("low_peak_dbfs", -25.0)),
+                    "high_peak_dbfs": float(metadata.get("high_peak_dbfs", -30.0)),
+                    "duration_sec": duration_sec,
+                    "inferred_tag": str(metadata.get("inferred_tag") or "suspected_external_impact"),
+                },
+                "human_review": {
+                    "verified": False,
+                    "label": None,
+                    "direction": "",
+                    "notes": "",
+                },
+            }
+
+            conn.execute(
+                """
+                INSERT INTO events (
+                    event_id, event_date,
+                    evidence_file, sha256, prev_chain_hash, chain_hash,
+                    sample_rate, channels,
+                    ntp_synced, device_calibrated, node_id, location_tag,
+                    start_time, end_time, trigger_time,
+                    trigger_band, peak_dbfs, baseline_dbfs, delta_db,
+                    low_peak_dbfs, high_peak_dbfs, duration_sec, inferred_tag,
+                    human_verified, human_label, human_direction, human_notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, '', '')
+                """,
+                (
+                    safe_id,
+                    event_date,
+                    record["raw_evidence"]["file"],
+                    actual_sha,
+                    prev_hash,
+                    chain_hash,
+                    sample_rate,
+                    record["raw_evidence"]["channels"],
+                    int(record["raw_evidence"]["ntp_synced"]),
+                    int(record["raw_evidence"]["device_calibrated"]),
+                    record["raw_evidence"]["node_id"],
+                    record["raw_evidence"]["location_tag"],
+                    record["raw_evidence"]["start_time"],
+                    record["raw_evidence"]["end_time"],
+                    trigger_iso,
+                    record["algo_metrics"]["trigger_band"],
+                    record["algo_metrics"]["peak_dbfs"],
+                    record["algo_metrics"]["baseline_dbfs"],
+                    record["algo_metrics"]["delta_db"],
+                    record["algo_metrics"]["low_peak_dbfs"],
+                    record["algo_metrics"]["high_peak_dbfs"],
+                    duration_sec,
+                    record["algo_metrics"]["inferred_tag"],
+                ),
+            )
+
+        json_path = day_dir / f"{safe_id}.json"
+        json_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        return record, True
+
     def get_event(self, event_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM events WHERE event_id = ?", (event_id,)).fetchone()

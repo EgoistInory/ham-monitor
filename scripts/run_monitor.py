@@ -17,6 +17,7 @@ from ham.capture import SoundDeviceAudioSource, local_now
 from ham.config import load_config
 from ham.evidence import EvidenceStore
 from ham.monitor import NoiseMonitor
+from ham.sync import RemoteSyncClient
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -72,11 +73,19 @@ def main() -> int:
         device=device,
         reconnect_interval_sec=cfg.audio.reconnect_interval_sec,
     )
+    sync_client = None
+    if cfg.sync.enabled:
+        sync_client = RemoteSyncClient(
+            config=cfg.sync,
+            queue_path=Path(cfg.storage.base_dir) / "sync_queue.json",
+        )
+
     monitor = NoiseMonitor(
         config=cfg,
         source=source,
         store=store,
         ignore_schedule=args.ignore_schedule,
+        sync_client=sync_client,
     )
 
     start_date = local_now().strftime("%Y-%m-%d")

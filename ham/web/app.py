@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import dataclasses
 import io
+import json
 import os
+import secrets
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -9,16 +13,19 @@ from typing import Annotated, Any, Literal, Optional
 
 import numpy as np
 import soundfile as sf
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from scipy.signal import butter, sosfilt, sosfiltfilt
 
+from ham.audio_io import load_mono_audio
+from ham.capture import SyntheticAudioSource
 from ham.config import AppConfig, load_config
 from ham.correlate import correlate_dual_nodes
 from ham.desensitize import export_share_bundle
 from ham.dsp import rms_dbfs
 from ham.evidence import EvidenceStore
+from ham.monitor import NoiseMonitor
 from ham.taxonomy import (
     get_category_group,
     get_category_label,
@@ -35,6 +42,9 @@ from ham.web.schemas import (
     DirectionStatSchema,
     EventRecordSchema,
     HourlyBucketSchema,
+    IngestEventResponse,
+    IngestUploadResponse,
+    NodeSummarySchema,
     OverviewResponse,
     ReviewUpdateRequest,
     ShareExportRequest,
@@ -52,6 +62,7 @@ class WebState:
     store: EvidenceStore
     exports_dir: Path
     demo_mode: bool = False
+    ingest_token: str = ""
 
 
 def _to_event_schema(rec: dict[str, Any]) -> EventRecordSchema:
@@ -70,6 +81,20 @@ def get_state(request: Request) -> WebState:
 
 
 StateDep = Annotated[WebState, Depends(get_state)]
+
+
+def verify_ingest_token(
+    state: StateDep,
+    x_ham_token: Annotated[Optional[str], Header(alias="X-HAM-Token")] = None,
+) -> None:
+    """Enforce X-HAM-Token when LAN ingest token is configured."""
+    if not state.ingest_token:
+        return
+    if not x_ham_token or not secrets.compare_digest(x_ham_token, state.ingest_token):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-HAM-Token")
+
+
+IngestAuthDep = Annotated[None, Depends(verify_ingest_token)]
 
 api_router = APIRouter(prefix="/api", tags=["ham-monitor"])
 
@@ -466,6 +491,138 @@ def download_export(filename: str, state: StateDep) -> FileResponse:
     return FileResponse(path=str(target), filename=filename, media_type="application/zip")
 
 
+@api_router.get("/nodes")
+def list_nodes(state: StateDep) -> list[NodeSummarySchema]:
+    """Summarize all capture nodes that have contributed evidence to this server."""
+    events = state.store.list_all_events()
+    nodes: dict[tuple[str, str], dict[str, Any]] = {}
+    for ev in events:
+        r = ev["raw_evidence"]
+        key = (r["node_id"], r["location_tag"])
+        if key not in nodes:
+            nodes[key] = {
+                "node_id": r["node_id"],
+                "location_tag": r["location_tag"],
+                "event_count": 0,
+                "last_seen": r["trigger_time"],
+                "calibrated": bool(r["device_calibrated"]),
+            }
+        nodes[key]["event_count"] += 1
+        if r["trigger_time"] > nodes[key]["last_seen"]:
+            nodes[key]["last_seen"] = r["trigger_time"]
+    return [
+        NodeSummarySchema(**v)
+        for v in sorted(nodes.values(), key=lambda x: x["last_seen"], reverse=True)
+    ]
+
+
+@api_router.post("/ingest/event")
+def ingest_remote_event(
+    state: StateDep,
+    _auth: IngestAuthDep,
+    file: Annotated[UploadFile, File(description="Lossless FLAC event slice from edge node")],
+    metadata_json: Annotated[str, Form(description="JSON metadata including event_id and client_sha256")],
+    response: Response,
+) -> IngestEventResponse:
+    """Receive a pre-sliced lossless FLAC event from a distributed edge node (idempotent + SHA-256 verified)."""
+    try:
+        metadata = json.loads(metadata_json)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid metadata_json: {exc}") from exc
+
+    event_id = str(metadata.get("event_id") or "").strip()
+    client_sha256 = str(metadata.get("client_sha256") or "").strip()
+    if not event_id or not metadata.get("trigger_time"):
+        raise HTTPException(status_code=400, detail="metadata_json requires event_id and trigger_time")
+
+    flac_bytes = file.file.read()
+    if not flac_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio payload")
+
+    try:
+        record, created = state.store.ingest_remote_flac(
+            event_id=event_id,
+            flac_bytes=flac_bytes,
+            client_sha256=client_sha256,
+            metadata=metadata,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Failed to ingest FLAC: {exc}") from exc
+
+    response.status_code = 201 if created else 200
+    return IngestEventResponse(
+        status="created" if created else "duplicate",
+        event_id=record["event_id"],
+        sha256=record["raw_evidence"]["sha256"],
+        chain_hash=record["raw_evidence"]["chain_hash"],
+    )
+
+
+@api_router.post("/ingest/upload")
+def ingest_raw_audio_upload(
+    state: StateDep,
+    _auth: IngestAuthDep,
+    file: Annotated[UploadFile, File(description="Offline audio recording (WAV/FLAC/OGG/MP3/M4A/CAF)")],
+    start_time: Annotated[str, Form(description="Recording start ISO8601 timestamp")],
+    node_id: Annotated[str, Form(description="Device node identifier")] = "phone_ceiling",
+    location_tag: Annotated[str, Form(description="Placement location tag")] = "ceiling",
+) -> IngestUploadResponse:
+    """Accept an offline phone/recorder audio file, run dual-band detection, and save triggered events."""
+    try:
+        start_dt = datetime.fromisoformat(start_time)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.astimezone()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid start_time ISO8601: {exc}") from exc
+
+    suffix = Path(file.filename or "upload.wav").suffix or ".wav"
+    with tempfile.TemporaryDirectory(prefix="ham_upload_") as tmp_dir:
+        tmp_path = Path(tmp_dir) / f"incoming{suffix}"
+        tmp_path.write_bytes(file.file.read())
+        try:
+            samples, sr = load_mono_audio(tmp_path)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    clean_node = "".join(ch for ch in node_id if ch.isalnum() or ch in ("_", "-")) or "phone_node"
+    clean_loc = "".join(ch for ch in location_tag if ch.isalnum() or ch in ("_", "-")) or "ceiling"
+
+    new_node = dataclasses.replace(
+        state.config.node,
+        node_id=clean_node,
+        location_tag=clean_loc,
+        calibrated=False,
+    )
+    new_audio = dataclasses.replace(state.config.audio, sample_rate=sr, channels=1)
+    # Use a fast warmup (<=2s) for short uploaded clips while respecting configured DSP bands
+    fast_dsp = dataclasses.replace(
+        state.config.dsp,
+        baseline_warmup_sec=min(state.config.dsp.baseline_warmup_sec, 2.0),
+    )
+    run_cfg = dataclasses.replace(state.config, node=new_node, audio=new_audio, dsp=fast_dsp)
+
+    source = SyntheticAudioSource(
+        samples=samples,
+        sample_rate=sr,
+        block_samples=run_cfg.audio.block_samples,
+        start_time=start_dt,
+    )
+    # Reuse the central EvidenceStore with node profile override via NoiseMonitor
+    node_store = EvidenceStore(run_cfg.storage, new_node)
+    monitor = NoiseMonitor(run_cfg, source, node_store, ignore_schedule=True)
+    saved = monitor.run(install_signals=False)
+
+    return IngestUploadResponse(
+        status="ok",
+        node_id=clean_node,
+        location_tag=clean_loc,
+        imported_count=len(saved),
+        event_ids=[r["event_id"] for r in saved],
+    )
+
+
 @api_router.get("/config")
 def get_system_config(state: StateDep) -> SystemConfigResponse:
     c = state.config
@@ -487,6 +644,7 @@ def get_system_config(state: StateDep) -> SystemConfigResponse:
         post_roll_sec=c.trigger.post_roll_sec,
         raw_retention_days=c.storage.raw_retention_days,
         demo_mode=state.demo_mode,
+        ingest_token_required=bool(state.ingest_token),
     )
 
 
@@ -494,10 +652,11 @@ def create_app(
     config_path: Optional[str | Path] = None,
     demo_mode: bool = False,
     demo_dir: Optional[Path] = None,
+    ingest_token: Optional[str] = None,
 ) -> FastAPI:
     app = FastAPI(
         title="ham-monitor Console API",
-        version="0.2.0",
+        version="0.4.0",
         description="Local-first passive acoustic monitoring & privacy-safe evidence workbench",
     )
 
@@ -512,11 +671,15 @@ def create_app(
         exports_dir = Path(cfg.storage.base_dir) / "exports"
 
     exports_dir.mkdir(parents=True, exist_ok=True)
+    effective_token = (
+        ingest_token if ingest_token is not None else os.environ.get("HAM_INGEST_TOKEN", "")
+    )
     app.state.ham_web = WebState(
         config=cfg,
         store=store,
         exports_dir=exports_dir,
         demo_mode=demo_mode,
+        ingest_token=effective_token,
     )
 
     app.include_router(api_router)

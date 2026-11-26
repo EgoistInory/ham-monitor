@@ -819,7 +819,7 @@ html, body {
 }
 .btn-icon-ghost:hover { background: var(--bg-hover); color: var(--ink-primary); }
 
-select, input[type="text"], textarea {
+select, input[type="text"], input[type="datetime-local"], input[type="file"], textarea {
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -832,6 +832,24 @@ select, input[type="text"], textarea {
   font-size: 13px;
   outline: none;
   color-scheme: inherit;
+}
+
+.nodes-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.node-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-rule);
+  font-size: 12px;
 }
 
 select:focus, input[type="text"]:focus, textarea:focus {

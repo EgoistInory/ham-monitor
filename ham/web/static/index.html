@@ -527,11 +527,56 @@
               <article class="vellum-card">
                 <div class="card-head">
                   <div>
-                    <h2 class="card-title serif">双节点方位粗窗对比</h2>
+                    <h2 class="card-title serif">手机 / 外部设备音频直传导入</h2>
+                    <p class="card-sub">支持 iPhone（.m4a 需本机装 ffmpeg）/ 安卓 / 录音笔（WAV/FLAC/OGG/MP3），上传后自动双频切分并写入哈希链</p>
+                  </div>
+                  <span id="ingest-auth-badge" class="pill-tag">本机直连</span>
+                </div>
+                <form id="upload-form" class="stack-form">
+                  <div class="form-three">
+                    <label class="field">
+                      <span>选择音频文件</span>
+                      <input type="file" id="upl-file" accept=".wav,.flac,.ogg,.mp3,.m4a,.caf,.aiff,audio/*" required />
+                    </label>
+                    <label class="field">
+                      <span>录音开始时间</span>
+                      <input type="datetime-local" id="upl-start-time" required />
+                    </label>
+                    <label class="field">
+                      <span>摆放位置</span>
+                      <select id="upl-location">
+                        <option value="ceiling">ceiling（衣柜顶 / 贴近天花板）</option>
+                        <option value="room_center">room_center（室内中部）</option>
+                        <option value="window_side">window_side（靠窗参考）</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="form-two">
+                    <label class="field">
+                      <span>设备节点名称（如 phone_ceiling）</span>
+                      <input type="text" id="upl-node-id" value="phone_ceiling" required />
+                    </label>
+                    <label class="field" id="upl-token-wrap">
+                      <span>局域网接入令牌 X-HAM-Token（仅局域网模式需填）</span>
+                      <input type="text" id="upl-token" placeholder="本机 127.0.0.1 访问可留空" />
+                    </label>
+                  </div>
+                  <div class="section-row-between">
+                    <span id="upl-status-text" class="micro-caption">边缘设备自动同步请配置 default.yaml 中的 sync.server_url</span>
+                    <button type="submit" id="btn-run-upload" class="btn btn-forest">上传并自动切分入库</button>
+                  </div>
+                </form>
+              </article>
+
+              <article class="vellum-card">
+                <div class="card-head">
+                  <div>
+                    <h2 class="card-title serif">已接入采集节点与双节点方位对比</h2>
                     <p class="card-sub">ceiling vs room_center（允许 ±2.0s 时钟漂移，排除本户与窗外干扰）</p>
                   </div>
                   <button type="button" id="btn-refresh-correlate" class="btn btn-ghost-bordered">重新计算</button>
                 </div>
+                <div id="nodes-strip" class="nodes-strip"></div>
                 <div id="correlate-table-wrap" class="table-wrap"></div>
               </article>
 
