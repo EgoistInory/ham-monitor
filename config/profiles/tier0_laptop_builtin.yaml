@@ -1,4 +1,4 @@
-# Tier 0（初级 / 0 成本）：闲置笔记本内置麦克风（2017 Intel MacBook / 旧 Windows / Linux）
+# Tier 0（初级 / 0 成本）：闲置笔记本内置麦克风（Intel/Apple Silicon macOS、旧 Windows 或 Linux 主机）
 # 适用场景：今晚零成本启动取证，验证楼上夜间作息规律与突刺特征
 # 注意：内置麦通常在 80Hz 以下有滚降，建议先跑 scripts/probe_mic.py 实测微调阈值
 

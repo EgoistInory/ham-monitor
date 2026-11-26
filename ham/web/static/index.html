@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HAM Monitor — 室内声学监测与司法级存证平台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2315332B'/%3E%3Cpath d='M4 16h4l3-9 5 18 3.5-11 2.5 5 2-3h4' fill='none' stroke='%23E4ECC6' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- Subtle Floating Status Toast -->
+  <div id="toast-island" class="toast-bar" role="status" aria-live="polite">
+    <span class="toast-dot" id="toast-dot"></span>
+    <span id="toast-text">准备就绪</span>
+  </div>
+
+  <!-- Command Palette Modal (Ctrl+K) -->
+  <div id="cmd-backdrop" class="cmd-backdrop hidden" role="dialog" aria-modal="true" aria-label="快捷命令面板">
+    <div class="cmd-modal">
+      <div class="cmd-input-row">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="cmd-input" type="text" placeholder="搜索工作区或命令（如：哈希链、脱敏包、深夜暗色）..." autocomplete="off" />
+        <kbd class="kbd-hint mono">ESC</kbd>
+      </div>
+      <div id="cmd-list" class="cmd-list"></div>
+    </div>
+  </div>
+
+  <!-- Slide-Over Quick Evidence Drawer (Inspired by Flagship Admin Drawer) -->
+  <div id="drawer-scrim" class="drawer-scrim hidden" aria-hidden="true"></div>
+  <aside id="evidence-drawer" class="evidence-drawer" role="dialog" aria-label="快速存证检验抽屉">
+    <div class="drawer-header">
+      <div>
+        <div class="drawer-eyebrow mono" id="drw-node-meta">NODE</div>
+        <h2 id="drw-event-id" class="drawer-title mono">--</h2>
+      </div>
+      <button type="button" id="btn-close-drawer" class="btn-icon-ghost" aria-label="关闭抽屉">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-metrics-row">
+        <div><span class="meta-label">触发时间</span><strong id="drw-time" class="mono">--</strong></div>
+        <div><span class="meta-label">瞬时峰值</span><strong id="drw-peak" class="mono">--</strong></div>
+        <div><span class="meta-label">超基线</span><strong id="drw-delta" class="mono text-forest">--</strong></div>
+        <div><span class="meta-label">时长</span><strong id="drw-dur" class="mono">--</strong></div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="section-row-between">
+          <span class="section-label">双频带示波图（点击跳转播放）</span>
+          <span id="drw-band-tag" class="pill-tag">--</span>
+        </div>
+        <canvas id="drawer-waveform-canvas" class="waveform-canvas" height="128"></canvas>
+      </div>
+
+      <div class="drawer-section">
+        <div class="section-row-between" style="margin-bottom:8px">
+          <div class="mini-seg" role="group" aria-label="抽屉播放模式">
+            <button type="button" id="drw-audio-desens" class="mini-seg-btn active">脱敏 ≤250Hz</button>
+            <button type="button" id="drw-audio-raw" class="mini-seg-btn">本地原件</button>
+          </div>
+          <span id="drw-audio-hint" class="micro-caption">低通脱敏副本</span>
+        </div>
+        <audio id="drawer-audio-player" class="native-audio" controls preload="metadata"></audio>
+      </div>
+
+      <div class="drawer-section">
+        <div class="section-row-between" style="margin-bottom:6px">
+          <span class="section-label">加密存证摘要（只读）</span>
+          <button type="button" id="drw-copy-sha" class="link-btn">复制 SHA-256</button>
+        </div>
+        <div id="drw-sha256" class="hash-box mono">--</div>
+      </div>
+
+      <form id="drawer-review-form" class="drawer-section stack-form">
+        <span class="section-label">快速人工复核</span>
+        <select id="drw-rev-label">
+          <option value="">-- 选择分类标签 --</option>
+          <option value="upstairs_impact">upstairs_impact（楼上蹦跳/撞击）</option>
+          <option value="upstairs_vocal">upstairs_vocal（楼上喊叫/直播）</option>
+          <option value="upstairs_mixed">upstairs_mixed（撞击+人声混合）</option>
+          <option value="self_noise">self_noise（本户误触排除）</option>
+          <option value="street_noise">street_noise（窗外车流/环境）</option>
+          <option value="appliance_hum">appliance_hum（设备共振）</option>
+        </select>
+        <textarea id="drw-rev-notes" rows="2" placeholder="填写客观事实备注..."></textarea>
+        <div class="section-row-between">
+          <label class="inline-check">
+            <input type="checkbox" id="drw-rev-verified" class="toggle-switch" checked />
+            <span>标记已复核</span>
+          </label>
+          <button type="submit" id="drw-save-review" class="btn btn-forest">保存复核</button>
+        </div>
+      </form>
+    </div>
+  </aside>
+
+  <div class="app-shell">
+    <!-- Deep British Forest Left Sidebar -->
+    <aside class="forest-rail" aria-label="主导航栏">
+      <div class="rail-brand">
+        <div class="brand-emblem" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12h3.5l2.3-7 3.8 14 2.7-9 2 4 1.7-2H22" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-name-row">
+            <span class="brand-name serif">HAM Monitor</span>
+          </div>
+          <div class="brand-sub">声学存证档案平台</div>
+        </div>
+      </div>
+
+      <button type="button" id="btn-open-cmd" class="rail-cmd-btn">
+        <span class="rail-cmd-left">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>快捷检索</span>
+        </span>
+        <kbd class="rail-kbd mono">⌘K</kbd>
+      </button>
+
+      <nav class="rail-nav" role="tablist" aria-label="主工作区导航">
+        <button type="button" class="rail-item active" data-tab="overview" role="tab" aria-selected="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span>总览与研判</span>
+        </button>
+        <button type="button" class="rail-item" data-tab="evidence" role="tab" aria-selected="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3m3-5v10m4-13v16m4-12v8m4-5v2"/></svg>
+          <span>声学证据库</span>
+          <span id="nav-unverified-count" class="rail-badge mono hidden">0</span>
+        </button>
+        <button type="button" class="rail-item" data-tab="corroboration" role="tab" aria-selected="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+          <span>外部互证台账</span>
+        </button>
+        <button type="button" class="rail-item" data-tab="export" role="tab" aria-selected="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>脱敏导出与双节点</span>
+        </button>
+      </nav>
+
+      <!-- Quiet Institutional Footer -->
+      <div class="rail-footer">
+        <div class="rail-node-card">
+          <div class="rail-avatar mono" id="rail-avatar">HM</div>
+          <div class="rail-node-info">
+            <div class="rail-node-name mono" id="rail-node-id">primary_node</div>
+            <div class="rail-node-sub" id="rail-cal-schedule">本地离线 · 未校准 dBFS</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Archival Workspace -->
+    <div class="workspace-col">
+      <!-- Clean 64px Vellum Topbar -->
+      <header class="vellum-topbar">
+        <div class="topbar-date-nav">
+          <select id="global-date-select" class="date-select" aria-label="日期筛选">
+            <option value="">全部监测日期</option>
+          </select>
+          <span id="demo-badge" class="pill-tag pill-amber hidden">演示沙箱</span>
+        </div>
+
+        <div class="topbar-right">
+          <button type="button" id="btn-verify-chain-top" class="btn btn-ghost-bordered">
+            <span class="live-dot" id="topbar-chain-dot"></span>
+            <span id="chain-badge-text">校验哈希链</span>
+          </button>
+
+          <button type="button" id="btn-theme-toggle" class="btn btn-ghost-bordered btn-icon" title="切换日间卷宗纸 / 深夜森林暗色" aria-label="切换明暗主题">
+            <svg id="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg id="icon-sun" class="hidden" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          </button>
+
+          <button type="button" id="btn-topbar-export" class="btn btn-forest">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>导出脱敏包</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="archival-main">
+        <!-- Editorial Page Header -->
+        <div class="editorial-head">
+          <div>
+            <div class="editorial-eyebrow mono" id="page-eyebrow">ACOUSTIC FORENSIC ARCHIVE</div>
+            <h1 class="editorial-title serif" id="view-title">声学存证总览</h1>
+            <p class="editorial-desc" id="view-subtitle">清晰掌握夜间扰民规律、加密存证完整性与外部互证进展</p>
+          </div>
+          <div id="status-summary-pill" class="summary-pill">
+            <span class="live-dot ok"></span>
+            <span id="summary-pill-text">全部证据链完整</span>
+          </div>
+        </div>
+
+        <!-- TAB 1: OVERVIEW -->
+        <section id="tab-overview" class="tab-panel active">
+          <!-- Unified 4-Cell Ruled Archival Metric Band (Willowsum Spotlight Signature) -->
+          <div class="archival-kpi-band">
+            <div class="kpi-cell">
+              <div class="kpi-label">命中异常事件</div>
+              <div class="kpi-figure serif tabular" id="kpi-total-events">0</div>
+              <div class="kpi-caption" id="kpi-verified-ratio">0 / 0 已人工复核</div>
+            </div>
+            <div class="kpi-cell">
+              <div class="kpi-label">累计留证时长</div>
+              <div class="kpi-figure serif tabular" id="kpi-total-duration">0.0 s</div>
+              <div class="kpi-caption mono" id="kpi-schedule-window">监测窗 22:30–07:00</div>
+            </div>
+            <div class="kpi-cell kpi-spotlight">
+              <div class="kpi-label">最大超基线增量</div>
+              <div class="kpi-figure serif tabular" id="kpi-max-delta">+0.0 dB</div>
+              <div class="kpi-caption" id="kpi-cal-status">相对静音基线（未校准 dBFS）</div>
+            </div>
+            <div class="kpi-cell">
+              <div class="kpi-label">外部互证台账</div>
+              <div class="kpi-figure serif tabular" id="kpi-corroboration-count">0 条</div>
+              <div class="kpi-caption" id="kpi-chain-status">物业 / 社区 / 110 / 邻居</div>
+            </div>
+          </div>
+
+          <!-- Dual-Column Analytical Row: Donut Breakdown + 24h Nocturnal Distribution -->
+          <div class="overview-charts-grid">
+            <article class="vellum-card">
+              <div class="card-head">
+                <h2 class="card-title serif">频段声源结构</h2>
+                <span class="card-meta">按触发能量分布</span>
+              </div>
+              <div class="donut-layout">
+                <div id="band-donut-wrap" class="donut-wrap"></div>
+                <div id="band-legend" class="donut-legend"></div>
+              </div>
+            </article>
+
+            <article class="vellum-card">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title serif">夜间高发时段分布</h2>
+                  <p class="card-sub">20:00 → 次日 19:00 · 辅助精准报警与 CMA 预约选点</p>
+                </div>
+                <div class="card-right-stat">
+                  <span class="meta-label">重点时段</span>
+                  <strong class="mono">22:00–07:00</strong>
+                </div>
+              </div>
+              <div id="hourly-chart-wrap" class="chart-wrap"></div>
+            </article>
+          </div>
+
+          <!-- Full-Width Archival Evidence Table (Click any row -> Slide-Over Forensic Drawer) -->
+          <article class="vellum-card table-card">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title serif">近期声学存证记录</h2>
+                <p class="card-sub">点击任意行滑出右侧检验抽屉，支持示波点击寻址与 ≤250 Hz 脱敏试听</p>
+              </div>
+              <button type="button" id="btn-goto-evidence" class="link-btn">进入完整证据库 →</button>
+            </div>
+            <div class="table-wrap">
+              <table class="archival-table">
+                <thead>
+                  <tr>
+                    <th>触发时间</th>
+                    <th>节点来源</th>
+                    <th>声源频段</th>
+                    <th>复核状态</th>
+                    <th class="num-col">时长</th>
+                    <th class="num-col">超基线增量</th>
+                  </tr>
+                </thead>
+                <tbody id="overview-events-tbody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- TAB 2: EVIDENCE VAULT -->
+        <section id="tab-evidence" class="tab-panel">
+          <div class="split-vault">
+            <aside class="vellum-card vault-list-card">
+              <div class="vault-filter-bar">
+                <div class="section-row-between">
+                  <h2 class="card-title serif" style="font-size:18px">存证时间轴</h2>
+                  <span id="vault-count-pill" class="pill-tag mono">0 条</span>
+                </div>
+                <div class="filter-two">
+                  <select id="filter-band" aria-label="按频段筛选">
+                    <option value="">全部频段</option>
+                    <option value="low_impact_20_180hz">低频撞击</option>
+                    <option value="high_vocal_300_4000hz">中高频人声</option>
+                    <option value="dual_band_impact_and_vocal">双频混合</option>
+                  </select>
+                  <select id="filter-verified" aria-label="按复核状态筛选">
+                    <option value="">全部状态</option>
+                    <option value="false">待复核</option>
+                    <option value="true">已复核</option>
+                  </select>
+                </div>
+              </div>
+              <div id="event-list" class="vault-event-list"></div>
+            </aside>
+
+            <section class="vellum-card vault-inspector-card">
+              <div id="inspector-empty" class="empty-state">
+                <p>在左侧选择一条声学存证记录，查看双频带示波图、脱敏试听与 SHA-256 哈希链。</p>
+              </div>
+
+              <div id="inspector-content" class="hidden">
+                <div class="inspector-top">
+                  <div>
+                    <div class="inspector-title-row">
+                      <h2 id="ins-event-id" class="card-title mono" style="font-size:16px"></h2>
+                      <span id="ins-band-pill" class="pill-tag"></span>
+                    </div>
+                    <p id="ins-time-range" class="card-sub mono"></p>
+                  </div>
+                  <div class="inspector-kpis">
+                    <div><span class="meta-label">峰值</span><strong id="ins-peak" class="mono"></strong></div>
+                    <div><span class="meta-label">超基线</span><strong id="ins-delta" class="mono text-forest"></strong></div>
+                    <div><span class="meta-label">时长</span><strong id="ins-duration" class="mono"></strong></div>
+                  </div>
+                </div>
+
+                <div class="inset-panel">
+                  <div class="section-row-between" style="margin-bottom:8px">
+                    <span class="section-label">双频带声学示波图（点击波形跳转进度）</span>
+                    <div class="legend-inline">
+                      <span><i class="dot-sm dot-low"></i>低频 20–180Hz</span>
+                      <span><i class="dot-sm dot-high"></i>人声 300–4kHz</span>
+                    </div>
+                  </div>
+                  <canvas id="waveform-canvas" class="waveform-canvas" height="148"></canvas>
+                </div>
+
+                <div class="inset-panel">
+                  <div class="section-row-between" style="margin-bottom:10px; gap:12px; flex-wrap:wrap">
+                    <div class="mini-seg" role="group" aria-label="音频播放模式">
+                      <button type="button" id="btn-audio-desens" class="mini-seg-btn active">脱敏 ≤250Hz</button>
+                      <button type="button" id="btn-audio-raw" class="mini-seg-btn">本地原件</button>
+                    </div>
+                    <span id="audio-mode-hint" class="micro-caption">当前播放：≤250 Hz 低通脱敏副本（消除清晰人声对话）</span>
+                  </div>
+                  <audio id="event-audio-player" class="native-audio" controls preload="metadata"></audio>
+                </div>
+
+                <div class="inset-panel">
+                  <div class="section-row-between" style="margin-bottom:8px">
+                    <span class="section-label">不可变存证元数据（Raw Evidence · 只读）</span>
+                    <button type="button" id="btn-copy-sha" class="link-btn">复制 SHA-256</button>
+                  </div>
+                  <div class="kv-grid mono">
+                    <div><span class="meta-label">节点位置</span><strong id="ins-node"></strong></div>
+                    <div><span class="meta-label">采样与计量</span><strong id="ins-sr-cal"></strong></div>
+                    <div class="span-2"><span class="meta-label">FLAC SHA-256</span><strong id="ins-sha256" class="hash-inline"></strong></div>
+                    <div class="span-2"><span class="meta-label">追加哈希链 (chain_hash)</span><strong id="ins-chain-hash" class="hash-inline"></strong></div>
+                  </div>
+                </div>
+
+                <form id="review-form" class="inset-panel stack-form">
+                  <span class="section-label">人工复核打标（仅更新 Human Review，绝不修改原始音频与哈希）</span>
+                  <div class="form-two">
+                    <label class="field">
+                      <span>人工分类标签</span>
+                      <select id="rev-label">
+                        <option value="">-- 选择标签 --</option>
+                        <option value="upstairs_impact">upstairs_impact（楼上蹦跳/撞击）</option>
+                        <option value="upstairs_vocal">upstairs_vocal（楼上喊叫/直播）</option>
+                        <option value="upstairs_mixed">upstairs_mixed（撞击+人声混合）</option>
+                        <option value="self_noise">self_noise（本户误触排除）</option>
+                        <option value="street_noise">street_noise（窗外车流/环境）</option>
+                        <option value="appliance_hum">appliance_hum（设备共振）</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>复核确认状态</span>
+                      <div class="inline-check" style="height:36px">
+                        <input type="checkbox" id="rev-verified" class="toggle-switch" checked />
+                        <span>标记为已人工复核</span>
+                      </div>
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span>客观事实备注（外发脱敏包默认隐藏，若包含则自动遮蔽手机号与房号）</span>
+                    <textarea id="rev-notes" rows="2" placeholder="例如：23:42 连续蹦跳惊醒家人，已向物业管家书面反映..."></textarea>
+                  </label>
+                  <div class="form-actions">
+                    <button type="submit" id="btn-save-review" class="btn btn-forest">保存复核记录</button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- TAB 3: CORROBORATION LEDGER -->
+        <section id="tab-corroboration" class="tab-panel">
+          <div class="two-col-layout">
+            <article class="vellum-card">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title serif">录入外部互证</h2>
+                  <p class="card-sub">固化物业劝阻、社区调解、110 回执与邻居证言</p>
+                </div>
+              </div>
+              <form id="corroboration-form" class="stack-form">
+                <label class="field">
+                  <span>互证类别</span>
+                  <select id="cor-category" required>
+                    <option value="property_notice">物业报修 / 上门劝阻记录</option>
+                    <option value="community_mediation">社区居委会 / 网格员调解</option>
+                    <option value="police_call">110 报警记录 / 受案回执</option>
+                    <option value="neighbor_witness">同楼栋邻居证言互证</option>
+                    <option value="landlord_notice">房东书面风险告知</option>
+                    <option value="cma_test">CMA 第三方检测记录</option>
+                    <option value="other">其他补充证据</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>回执 / 工单编号（可选）</span>
+                  <input id="cor-ref" type="text" placeholder="如：110-20261125-0148 / 物业工单号" />
+                </label>
+                <label class="field">
+                  <span>关联声学事件（可选）</span>
+                  <select id="cor-event-id">
+                    <option value="">-- 不关联特定音频 --</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>客观事实摘要</span>
+                  <textarea id="cor-summary" rows="3" required placeholder="记录时间、沟通对象、答复与处置结果"></textarea>
+                </label>
+                <button type="submit" id="btn-add-corroboration" class="btn btn-forest btn-full">写入互证台账</button>
+              </form>
+            </article>
+
+            <article class="vellum-card col-span-2">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title serif">多维互证时间轴</h2>
+                  <p class="card-sub">声学规律日志 + 前置劝阻 + 出警/邻里互证，形成闭环证据链</p>
+                </div>
+              </div>
+              <div id="corroboration-list" class="timeline-stack"></div>
+            </article>
+          </div>
+        </section>
+
+        <!-- TAB 4: EXPORT & DUAL-NODE -->
+        <section id="tab-export" class="tab-panel">
+          <div class="two-col-layout">
+            <article class="vellum-card">
+              <div class="card-head">
+                <div>
+                  <h2 class="card-title serif">隐私脱敏包导出</h2>
+                  <p class="card-sub">提交物业、房东、社区或 12345：零绝对路径、零清晰人声</p>
+                </div>
+              </div>
+              <form id="export-form" class="stack-form">
+                <div class="inset-panel switch-between">
+                  <div>
+                    <div class="section-label">附带 ≤250 Hz 低通撞击音频</div>
+                    <div class="micro-caption">保留楼板震动，消除 300–4000 Hz 人声可懂度</div>
+                  </div>
+                  <input type="checkbox" id="exp-include-audio" class="toggle-switch" checked />
+                </div>
+
+                <div class="inset-panel" id="cutoff-slider-wrap">
+                  <div class="section-row-between" style="margin-bottom:6px">
+                    <span class="section-label">低通截止频率</span>
+                    <strong id="exp-cutoff-val" class="mono">250 Hz</strong>
+                  </div>
+                  <input type="range" id="exp-cutoff" min="120" max="300" step="10" value="250" class="range-slider" />
+                </div>
+
+                <div class="inset-panel switch-between">
+                  <div>
+                    <div class="section-label">包含脱敏清洗后的人工备注</div>
+                    <div class="micro-caption">自动遮蔽手机号与楼栋房号（默认关闭）</div>
+                  </div>
+                  <input type="checkbox" id="exp-include-notes" class="toggle-switch" />
+                </div>
+
+                <div class="archival-note">
+                  <span>导出 ZIP 内附零音频 <code>TIMESTAMP_MANIFEST.txt</code>，可直接通过 OpenTimestamps 锚定客观存在时间。</span>
+                </div>
+
+                <button type="submit" id="btn-run-export" class="btn btn-forest btn-full">生成并下载脱敏 ZIP 包</button>
+              </form>
+
+              <div id="export-result" class="inset-panel export-result hidden"></div>
+            </article>
+
+            <div class="stack-col col-span-2">
+              <article class="vellum-card">
+                <div class="card-head">
+                  <div>
+                    <h2 class="card-title serif">双节点方位粗窗对比</h2>
+                    <p class="card-sub">ceiling vs room_center（允许 ±2.0s 时钟漂移，排除本户与窗外干扰）</p>
+                  </div>
+                  <button type="button" id="btn-refresh-correlate" class="btn btn-ghost-bordered">重新计算</button>
+                </div>
+                <div id="correlate-table-wrap" class="table-wrap"></div>
+              </article>
+
+              <article class="vellum-card">
+                <div class="card-head">
+                  <div>
+                    <h2 class="card-title serif">当前采集配置与诊断</h2>
+                    <p class="card-sub">只读摘要 · 阈值调整请编辑 YAML 后运行 <code>scripts/probe_mic.py</code></p>
+                  </div>
+                </div>
+                <div id="config-grid" class="kv-grid mono"></div>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/app.js" type="module"></script>
+</body>
+</html>

@@ -112,7 +112,7 @@ def test_preroll_15s_event_merging_flac_and_sha256(tmp_path: Path) -> None:
     signal[26 * sr : 28 * sr] += _make_sine(2 * sr, 1200.0, sr, amp=0.18)
 
     cfg = AppConfig(
-        node=DeviceProfile(node_id="macbook_test", location_tag="room_center", calibrated=False),
+        node=DeviceProfile(node_id="test_primary", location_tag="room_center", calibrated=False),
         audio=AudioConfig(sample_rate=sr, channels=1, block_duration_sec=block_sec),
         schedule=ScheduleConfig(enabled=False),
         dsp=DSPConfig(

@@ -6,7 +6,7 @@
 
 ## 1. 环境准备与安装
 
-### macOS（含 2017 Intel MacBook `x86_64`）
+### macOS（兼容 Intel `x86_64` 与 Apple Silicon）
 ```bash
 # 1. 安装 PortAudio 底层音频库
 brew install portaudio
@@ -71,11 +71,18 @@ bash deploy/install_launchd.sh
 
 ## 4. 每日早间 2 分钟维护 SOP
 
+> **可视化控制台快捷操作**：可直接启动本地 Web 工作台在浏览器中完成复核、试听、外部互证与脱敏导出（默认仅绑定 `127.0.0.1`，不对外暴露）：
+> ```bash
+> python scripts/run_web.py          # 正式证据库 (http://127.0.0.1:8765)
+> python scripts/run_web.py --demo   # 隔离演示沙箱（预置合成样本）
+> ```
+> 如习惯纯命令行维护，可按以下步骤执行：
+
 1. **查看早间日报**：打开 `data/reports/YYYY-MM-DD_report.md`，扫一眼昨夜触发次数、时段分布与频段特征。
 2. **抽听并人工复核打标**（仅更新 `human_review`，绝不破坏原始证据哈希）：
    ```bash
    python scripts/review_event.py \
-     --event-id 20261125_234218_macbook_main \
+     --event-id 20261125_234218_primary_node \
      --label upstairs_impact \
      --notes "23:42 连续蹦跳并伴随喊叫，已向物业微信反馈"
    ```
@@ -87,7 +94,7 @@ bash deploy/install_launchd.sh
      --ref "WY-20261125-01" \
      --summary "23:45 微信向物业报修，管家回复已电话提醒楼上" \
      --attachment /path/to/wechat_screenshot.png \
-     --event-id 20261125_234218_macbook_main
+     --event-id 20261125_234218_primary_node
    ```
    支持类别：`property_notice` / `community_mediation` / `police_call` / `neighbor_witness` / `landlord_notice` / `cma_test` / `other`。
 4. **刷新日报**：`python scripts/run_monitor.py --report-only --report-date 2026-11-25`，外部互证会自动合并进日报。

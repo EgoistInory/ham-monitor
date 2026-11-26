@@ -2,7 +2,7 @@
 # 所有电平值在 device_calibrated=false 时均为相对数字电平 (dBFS)，不代表法定声压级 (dB SPL)
 
 node:
-  node_id: "macbook_main"
+  node_id: "primary_node"
   location_tag: "room_center"   # 可选: room_center / ceiling / window_side
   calibrated: false
   calibration_file: null        # Phase 2/3 接入测量麦校准曲线 (.txt)

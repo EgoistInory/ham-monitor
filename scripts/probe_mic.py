@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Day 1 现场声学探针脚本：验证 2017 MacBook 内置麦或外置麦的真实底噪与频段信噪比。
+"""Day 1 现场声学探针脚本：验证内置麦或外置 USB 麦的真实底噪与频段信噪比。
 
 用法:
   python scripts/probe_mic.py --list-devices

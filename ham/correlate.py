@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 class CorrelatedPair:
     """Coarse time-window match between a ceiling node and a room_center node.
 
-    Because independent devices (e.g. an idle Android phone + a MacBook) have
+    Because independent devices (e.g. an idle phone + an indoor laptop/mini-PC) have
     drifting quartz clocks, Phase 2 uses coarse window matching + relative
     energy ratio rather than sample-level TDOA.
     """

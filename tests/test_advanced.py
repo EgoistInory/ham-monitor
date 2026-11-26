@@ -198,7 +198,7 @@ def test_dual_node_correlation_ceiling_vs_center(tmp_path: Path) -> None:
     t_self = datetime(2026, 11, 25, 23, 30, 0, tzinfo=timezone.utc)
 
     ceiling_prof = DeviceProfile(node_id="android_top", location_tag="ceiling")
-    center_prof = DeviceProfile(node_id="macbook_mid", location_tag="room_center")
+    center_prof = DeviceProfile(node_id="indoor_mid", location_tag="room_center")
 
     # Event 1: ceiling is 8 dB louder than room_center (1.1s clock skew) -> likely_ceiling_source
     store.save_event(

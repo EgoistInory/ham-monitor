@@ -15,7 +15,7 @@ class DeviceProfile:
     presented as statutory dB SPL.
     """
 
-    node_id: str = "macbook_main"
+    node_id: str = "primary_node"
     location_tag: str = "room_center"
     calibrated: bool = False
     calibration_file: Optional[str] = None
