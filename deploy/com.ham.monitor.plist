@@ -8,11 +8,13 @@
     <key>WorkingDirectory</key>
     <string>__REPO_DIR__</string>
 
-    <!-- 使用 caffeinate -is 防止 macOS 节点在夜间监测期间进入系统休眠 -->
+    <!-- 使用 caffeinate -ims + Interactive 防止 macOS 锁屏息屏后进入系统/磁盘休眠或 App Nap -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/caffeinate</string>
-        <string>-is</string>
+        <string>-ims</string>
         <string>__PYTHON_BIN__</string>
         <string>__REPO_DIR__/scripts/run_monitor.py</string>
         <string>--config</string>

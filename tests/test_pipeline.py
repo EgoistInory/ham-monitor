@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -8,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from ham.capture import SyntheticAudioSource
+from ham.capture import SoundDeviceAudioSource, SyntheticAudioSource
 from ham.config import (
     AppConfig,
     AudioConfig,
@@ -270,3 +272,66 @@ def test_cross_midnight_schedule() -> None:
     assert is_within_schedule(datetime(2026, 11, 26, 6, 59), sched) is True
     assert is_within_schedule(datetime(2026, 11, 26, 7, 0), sched) is False
     assert is_within_schedule(datetime(2026, 11, 26, 14, 0), sched) is False
+
+
+def test_audio_source_stall_triggers_reconnect_even_when_stream_active() -> None:
+    class _FakeActiveStream:
+        active = True
+
+    src = SoundDeviceAudioSource(stall_timeout_sec=0.05)
+    src._running = True
+    src._stream = _FakeActiveStream()
+    src._last_block_monotonic = time.monotonic() - 1.0
+
+    reconnect_calls = 0
+
+    def _fake_reconnect() -> None:
+        nonlocal reconnect_calls
+        reconnect_calls += 1
+        src._last_block_monotonic = time.monotonic()
+
+    src._reconnect = _fake_reconnect  # type: ignore[method-assign]
+    item = src.read_block(timeout_sec=0.01)
+    assert item is None
+    assert reconnect_calls == 1
+
+
+def test_monitor_heartbeat_and_pure_silence_detection(tmp_path: Path, caplog) -> None:
+    sr = 16000
+    # 22s of exact digital zeros -> crosses the 20s pure digital silence alert threshold
+    signal = np.zeros(sr * 22, dtype=np.float32)
+    cfg = AppConfig(
+        audio=AudioConfig(sample_rate=sr, block_duration_sec=0.25),
+        schedule=ScheduleConfig(enabled=False),
+        dsp=DSPConfig(baseline_warmup_sec=2.0),
+        trigger=TriggerConfig(min_active_sec=0.75, pre_roll_sec=2.0, post_roll_sec=2.0),
+        storage=StorageConfig(
+            base_dir=str(tmp_path),
+            evidence_dir=str(tmp_path / "evidence"),
+            raw_dir=str(tmp_path / "raw"),
+            db_path=str(tmp_path / "ham_events.sqlite3"),
+            reports_dir=str(tmp_path / "reports"),
+        ),
+    )
+    source = SyntheticAudioSource(signal, sample_rate=sr, block_samples=cfg.audio.block_samples)
+    store = EvidenceStore(cfg.storage, cfg.node)
+    heartbeat_file = tmp_path / "monitor_heartbeat.json"
+
+    with caplog.at_level(logging.INFO, logger="ham.monitor"):
+        records = NoiseMonitor(
+            cfg,
+            source,
+            store,
+            ignore_schedule=True,
+            heartbeat_interval_sec=0.01,
+            heartbeat_path=heartbeat_file,
+        ).run(install_signals=False)
+
+    assert records == []
+    assert heartbeat_file.exists()
+    hb = json.loads(heartbeat_file.read_text(encoding="utf-8"))
+    assert hb["status"] == "stopped"
+    assert hb["blocks_processed"] == 88
+    assert hb["zero_block_streak"] == 88
+    assert "[HEARTBEAT]" in caplog.text
+    assert "pure digital silence" in caplog.text

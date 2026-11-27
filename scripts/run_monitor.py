@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from logging.handlers import RotatingFileHandler
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -27,6 +28,29 @@ def setup_logging(verbose: bool = False) -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+
+def attach_file_logger(log_path: Path, verbose: bool = False) -> None:
+    """Persist runtime and heartbeat logs to a rotating local log file."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    root = logging.getLogger()
+    for existing in root.handlers:
+        if isinstance(existing, RotatingFileHandler) and Path(existing.baseFilename) == log_path.resolve():
+            return
+    handler = RotatingFileHandler(
+        log_path,
+        maxBytes=2 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    handler.setLevel(logging.DEBUG if verbose else logging.INFO)
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    root.addHandler(handler)
 
 
 def main() -> int:
@@ -54,6 +78,9 @@ def main() -> int:
 
     setup_logging(args.verbose)
     cfg = load_config(args.config)
+    base_dir = Path(cfg.storage.base_dir)
+    if not args.report_only:
+        attach_file_logger(base_dir / "monitor.log", verbose=args.verbose)
     store = EvidenceStore(cfg.storage, cfg.node)
 
     if args.report_only:
@@ -86,6 +113,7 @@ def main() -> int:
         store=store,
         ignore_schedule=args.ignore_schedule,
         sync_client=sync_client,
+        heartbeat_path=base_dir / "monitor_heartbeat.json",
     )
 
     start_date = local_now().strftime("%Y-%m-%d")

@@ -44,19 +44,23 @@ class SoundDeviceAudioSource(AudioSource):
         device: Optional[Any] = None,
         reconnect_interval_sec: float = 3.0,
         max_queue_blocks: int = 64,
+        stall_timeout_sec: float = 10.0,
     ) -> None:
         self._sample_rate = sample_rate
         self._channels = channels
         self._block_samples = block_samples
         self._device = device
         self._reconnect_interval = reconnect_interval_sec
+        self._stall_timeout_sec = stall_timeout_sec
         self._queue: queue.Queue[Tuple[np.ndarray, datetime]] = queue.Queue(maxsize=max_queue_blocks)
         self._stream: Any = None
         self._running = False
+        self._last_block_monotonic: float = time.monotonic()
 
     def _callback(self, indata: np.ndarray, frames: int, time_info: Any, status: Any) -> None:
         if status:
             logger.warning("Audio input status flag: %s", status)
+        self._last_block_monotonic = time.monotonic()
         ts = local_now()
         mono = indata[:, 0].copy() if indata.ndim > 1 else indata.copy()
         try:
@@ -81,6 +85,7 @@ class SoundDeviceAudioSource(AudioSource):
             callback=self._callback,
         )
         self._stream.start()
+        self._last_block_monotonic = time.monotonic()
         logger.info(
             "Audio stream started (device=%s, sr=%d, block=%d)",
             self._device if self._device is not None else "default",
@@ -115,6 +120,15 @@ class SoundDeviceAudioSource(AudioSource):
             return self._queue.get(timeout=timeout_sec)
         except queue.Empty:
             if self._stream is not None and not self._stream.active:
+                self._reconnect()
+            elif (
+                self._stall_timeout_sec > 0
+                and (time.monotonic() - self._last_block_monotonic) >= self._stall_timeout_sec
+            ):
+                logger.warning(
+                    "Audio callback stalled for %.1fs while stream reports active; triggering self-healing reconnect",
+                    time.monotonic() - self._last_block_monotonic,
+                )
                 self._reconnect()
             return None
 
