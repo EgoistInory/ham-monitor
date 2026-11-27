@@ -208,7 +208,7 @@ def main() -> int:
     parser.add_argument(
         "--daemon",
         action="store_true",
-        help="昼伏夜出常驻模式：仅在 schedule 时间窗内开启麦克风与防休眠，白天自动释放等待下一晚（推荐 macOS 在 iTerm2/终端中运行）",
+        help="昼伏夜出常驻模式：仅在 schedule 时间窗内开启麦克风与防休眠，白天自动释放等待下一晚（推荐 macOS 在已授权的终端中运行）",
     )
     parser.add_argument("--device", default=None, help="覆盖配置中的音频输入设备索引或名称")
     parser.add_argument("--report-only", action="store_true", help="仅生成指定日期的日报并退出")
