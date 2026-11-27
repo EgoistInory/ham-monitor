@@ -124,9 +124,9 @@ python scripts/run_monitor.py --ignore-schedule
 # 若使用 Mac mini/台式机 + 有线线控耳机麦（如 EarPods），推荐改用低频避工频模板（配合 caffeinate 防休眠，锁屏/关屏不断采）：
 caffeinate -is python scripts/run_monitor.py --config config/profiles/tier0_wired_headset_mic.yaml -v
 
-# 5. Day 3：macOS 安装每晚 22:30 自动启动的 launchd 定时任务（可传自定义模板路径作为参数）
-bash deploy/install_launchd.sh
-# 例如有线耳机麦：bash deploy/install_launchd.sh config/profiles/tier0_wired_headset_mic.yaml
+# 5. Day 3：长期夜间无人值守（macOS 推荐在已授权的 iTerm2/终端 运行 --daemon 昼伏夜出模式，避开 launchd TCC 静默静音）
+python scripts/run_monitor.py --daemon --config config/profiles/tier0_wired_headset_mic.yaml -v
+# （如环境已确认 launchd 不被 macOS 静音拦截，也可使用：bash deploy/install_launchd.sh）
 
 # 6. 启动正式本地管理台（连接 config/default.yaml 对应的正式证据库）
 python scripts/run_web.py

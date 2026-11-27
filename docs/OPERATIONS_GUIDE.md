@@ -71,7 +71,19 @@ caffeinate -is python scripts/run_monitor.py --config config/profiles/tier0_wire
 ```
 按 `Ctrl+C` 时程序会优雅退出，并自动把正在录制中的事件完整落盘、生成日报。建议过夜值守在独立的系统「终端」窗口中运行，避免关闭编辑器/IDE 时连带终止后台进程。
 
-### macOS 夜间定时无人值守（推荐）
+### macOS 夜间定时无人值守（推荐：终端 `--daemon` 昼伏夜出模式）
+
+> **macOS 隐私权限重要提示**：新版 macOS（Sequoia+）对 `launchd` 直接拉起无 `NSMicrophoneUsageDescription` 声明的 `Python.app` 会**静默拦截麦克风**（不弹窗、不亮右上角黄色麦克风圆点，音频流全为 `-200 dBFS` 纯数字静音）。
+> 因此 macOS 最稳妥的全自动方式是直接在已授予麦克风权限的 **iTerm2 / 系统「终端」** 独立标签页运行 `--daemon`：
+
+```bash
+# 在 iTerm2 / 终端常驻运行（白天 07:00–22:30 自动释放麦克风与防休眠，每晚 22:30 自动开麦并拉起 caffeinate -ims）
+python scripts/run_monitor.py --daemon --config config/profiles/tier0_wired_headset_mic.yaml --device "外置麦克风" -v
+```
+- **白天（`07:00–22:30`）**：自动关闭音频流与 `caffeinate`，黄色麦克风指示灯熄灭，不阻止系统待机，心跳文件标为 `standby_outside_schedule`；
+- **夜间（`22:30–07:00`）**：自动开启麦克风与 `caffeinate -ims` 防系统/磁盘休眠，100% 继承终端权限零弹窗，次日 `07:00` 自动落盘生成日报并切回白天待机。
+
+### macOS `launchd` 定时任务（仅限已验证不被 TCC 静音拦截的环境）
 ```bash
 # 默认使用 config/default.yaml
 bash deploy/install_launchd.sh
@@ -79,8 +91,8 @@ bash deploy/install_launchd.sh
 # 若使用有线耳机麦 / Tier 1 USB 麦等自定义模板，可作为参数传入：
 bash deploy/install_launchd.sh config/profiles/tier0_wired_headset_mic.yaml
 ```
-- 每天 **22:30** 通过 `/usr/bin/caffeinate -is` 自动拉起监测（防系统休眠断采）；
-- 次日 **07:00** 由程序内时间窗自动退出，并生成 `data/reports/YYYY-MM-DD_report.md`；
+- 每天 **22:30** 通过 `/usr/bin/caffeinate -ims` 自动拉起监测，次日 **07:00** 自动退出并生成日报；
+- **首次务必核验**：启动 30 秒后查看 `data/launchd_stderr.log` 与 `data/monitor_heartbeat.json`，若出现 `pure digital silence (<= -199 dBFS)` 或 `zero_block_streak` 持续增长，说明被 macOS TCC 静默拦截，请卸载 `launchd` 并改用上方 `--daemon` 模式；
 - 日志查看：`tail -f data/launchd_stderr.log`；
 - 卸载定时任务：`launchctl unload ~/Library/LaunchAgents/com.ham.monitor.plist`。
 

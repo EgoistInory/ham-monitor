@@ -353,3 +353,60 @@ def test_monitor_heartbeat_and_pure_silence_detection(tmp_path: Path, caplog) ->
     report_text = report_path.read_text(encoding="utf-8")
     assert "运行健康审计" in report_text
     assert "`OK`" in report_text
+
+
+def test_run_daemon_loop_waits_outside_schedule_and_runs_inside_window(tmp_path: Path, monkeypatch) -> None:
+    from scripts.run_monitor import run_daemon_loop
+
+    monkeypatch.setattr("ham.monitor.local_now", lambda: datetime(2026, 11, 27, 22, 35, 0))
+
+    sr = 16000
+    cfg = AppConfig(
+        audio=AudioConfig(sample_rate=sr, block_duration_sec=0.25),
+        schedule=ScheduleConfig(enabled=True, start_time="22:30", end_time="07:00"),
+        dsp=DSPConfig(baseline_warmup_sec=1.0),
+        storage=StorageConfig(
+            base_dir=str(tmp_path),
+            evidence_dir=str(tmp_path / "evidence"),
+            raw_dir=str(tmp_path / "raw"),
+            db_path=str(tmp_path / "ham_events.sqlite3"),
+            reports_dir=str(tmp_path / "reports"),
+        ),
+    )
+    store = EvidenceStore(cfg.storage, cfg.node)
+    heartbeat_file = tmp_path / "monitor_heartbeat.json"
+
+    # First check is daytime (14:00 -> standby), then transitions into nocturnal window (22:35)
+    times = iter(
+        [
+            datetime(2026, 11, 27, 14, 0, 0),
+            datetime(2026, 11, 27, 22, 35, 0),
+            datetime(2026, 11, 27, 22, 35, 0),
+            datetime(2026, 11, 27, 22, 36, 0),
+        ]
+    )
+    created_sources = 0
+
+    def _source_factory() -> SyntheticAudioSource:
+        nonlocal created_sources
+        created_sources += 1
+        return SyntheticAudioSource(
+            _make_noise(sr * 2, amp=2e-4, seed=13),
+            sample_rate=sr,
+            block_samples=cfg.audio.block_samples,
+        )
+
+    sessions = run_daemon_loop(
+        cfg=cfg,
+        store=store,
+        source_factory=_source_factory,
+        heartbeat_path=heartbeat_file,
+        ignore_schedule=False,
+        now_fn=lambda: next(times),
+        poll_interval_sec=0.01,
+        max_sessions=1,
+        use_caffeinate=False,
+    )
+    assert sessions == 1
+    assert created_sources == 1
+    assert (tmp_path / "reports" / "2026-11-27_report.md").exists()
