@@ -648,7 +648,11 @@ class EvidenceStore:
         output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return output_path
 
-    def generate_daily_report(self, date_str: str) -> Path:
+    def generate_daily_report(
+        self,
+        date_str: str,
+        monitor_stats: Optional[Dict[str, Any]] = None,
+    ) -> Path:
         """Export a concise Markdown morning review report for YYYY-MM-DD."""
         events = self.list_events_by_date(date_str)
         corroborations = self.list_corroboration_logs(date_str)
@@ -672,6 +676,25 @@ class EvidenceStore:
             f"- **最大超基线增量**: +{max_delta:.1f} dB",
             "",
         ]
+
+        if monitor_stats:
+            low_b = monitor_stats.get("last_low_baseline_dbfs")
+            high_b = monitor_stats.get("last_high_baseline_dbfs")
+            base_str = (
+                f"低频 {low_b:.1f} dBFS / 高频 {high_b:.1f} dBFS"
+                if low_b is not None and high_b is not None
+                else "N/A"
+            )
+            lines.extend(
+                [
+                    "## 运行健康审计",
+                    "",
+                    f"- **值守起止**: `{monitor_stats.get('started_at', '-')}` → `{monitor_stats.get('ended_at', '-')}`",
+                    f"- **实际采集音频**: {monitor_stats.get('audio_duration_sec', 0.0)} 秒（{monitor_stats.get('blocks_processed', 0)} 帧，读超时 {monitor_stats.get('read_timeouts', 0)} 次）",
+                    f"- **麦克风链路状态**: `{monitor_stats.get('mic_health', 'UNKNOWN')}`（数字静音帧占比 {monitor_stats.get('silent_ratio_pct', 0.0)}%，末次动态底噪 {base_str}）",
+                    "",
+                ]
+            )
 
         if not events:
             lines.append("今日监测窗口内未触发超标噪声事件。")

@@ -59,6 +59,7 @@ class NoiseMonitor:
         self._heartbeat_interval_sec = heartbeat_interval_sec
         self._heartbeat_path = heartbeat_path
         self._stop_requested = False
+        self.last_run_stats: Optional[Dict[str, Any]] = None
 
         self._analyzer = DualBandAnalyzer(
             sample_rate=config.audio.sample_rate,
@@ -149,6 +150,8 @@ class NoiseMonitor:
 
         saved_records: List[Dict[str, Any]] = []
         blocks_processed = 0
+        read_timeouts = 0
+        silent_blocks = 0
         zero_block_streak = 0
         last_metrics: Optional[Any] = None
         last_heartbeat_ts = time.monotonic()
@@ -158,6 +161,7 @@ class NoiseMonitor:
         if self._sync_client is not None and self._sync_client.enabled:
             self._sync_client.flush_queue(self._store)
         self._source.start()
+        started_at = local_now()
         self._emit_heartbeat("running", blocks_processed, 0, last_metrics, zero_block_streak, log_line=False)
         logger.info(
             "NoiseMonitor started (node=%s, schedule=%s-%s, ignore_schedule=%s)",
@@ -178,6 +182,7 @@ class NoiseMonitor:
                     # Synthetic source returns None on EOF; live source returns None on read timeout
                     if not hasattr(self._source, "_stream"):
                         break
+                    read_timeouts += 1
                     now_mono = time.monotonic()
                     if self._heartbeat_interval_sec > 0 and (now_mono - last_heartbeat_ts) >= self._heartbeat_interval_sec:
                         self._emit_heartbeat(
@@ -199,6 +204,7 @@ class NoiseMonitor:
                 last_metrics = metrics
 
                 if metrics.raw_peak_dbfs <= -199.0:
+                    silent_blocks += 1
                     zero_block_streak += 1
                     silence_sec = zero_block_streak * self._cfg.audio.block_duration_sec
                     now_mono = time.monotonic()
@@ -262,5 +268,28 @@ class NoiseMonitor:
                 log_line=False,
             )
             self._source.stop()
+            ended_at = local_now()
+            silent_ratio = round((silent_blocks / blocks_processed) * 100.0, 2) if blocks_processed else 0.0
+            mic_health = (
+                "NO_AUDIO"
+                if blocks_processed == 0
+                else ("SILENT_OR_MUTED" if silent_ratio >= 50.0 else "OK")
+            )
+            self.last_run_stats = {
+                "started_at": started_at.isoformat(timespec="seconds"),
+                "ended_at": ended_at.isoformat(timespec="seconds"),
+                "audio_duration_sec": round(blocks_processed * self._cfg.audio.block_duration_sec, 1),
+                "blocks_processed": blocks_processed,
+                "read_timeouts": read_timeouts,
+                "silent_blocks": silent_blocks,
+                "silent_ratio_pct": silent_ratio,
+                "last_low_baseline_dbfs": round(float(last_metrics.low_baseline_dbfs), 1)
+                if last_metrics is not None
+                else None,
+                "last_high_baseline_dbfs": round(float(last_metrics.high_baseline_dbfs), 1)
+                if last_metrics is not None
+                else None,
+                "mic_health": mic_health,
+            }
 
         return saved_records

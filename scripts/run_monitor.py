@@ -123,7 +123,7 @@ def main() -> int:
     # Cross-midnight runs span two dates; generate reports for any involved date
     dates_to_report = sorted({start_date, end_date})
     for d in dates_to_report:
-        report_path = store.generate_daily_report(d)
+        report_path = store.generate_daily_report(d, monitor_stats=monitor.last_run_stats)
         logging.getLogger(__name__).info("已更新日报 (%s): %s", d, report_path)
 
     logging.getLogger(__name__).info("本次运行共保存 %d 条噪声证据事件。", len(saved))

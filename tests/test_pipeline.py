@@ -318,14 +318,15 @@ def test_monitor_heartbeat_and_pure_silence_detection(tmp_path: Path, caplog) ->
     heartbeat_file = tmp_path / "monitor_heartbeat.json"
 
     with caplog.at_level(logging.INFO, logger="ham.monitor"):
-        records = NoiseMonitor(
+        mon_muted = NoiseMonitor(
             cfg,
             source,
             store,
             ignore_schedule=True,
             heartbeat_interval_sec=0.01,
             heartbeat_path=heartbeat_file,
-        ).run(install_signals=False)
+        )
+        records = mon_muted.run(install_signals=False)
 
     assert records == []
     assert heartbeat_file.exists()
@@ -333,5 +334,22 @@ def test_monitor_heartbeat_and_pure_silence_detection(tmp_path: Path, caplog) ->
     assert hb["status"] == "stopped"
     assert hb["blocks_processed"] == 88
     assert hb["zero_block_streak"] == 88
+    assert mon_muted.last_run_stats is not None
+    assert mon_muted.last_run_stats["mic_health"] == "SILENT_OR_MUTED"
     assert "[HEARTBEAT]" in caplog.text
     assert "pure digital silence" in caplog.text
+
+    ambient_source = SyntheticAudioSource(
+        _make_noise(sr * 4, amp=2e-4, seed=77),
+        sample_rate=sr,
+        block_samples=cfg.audio.block_samples,
+    )
+    mon_ok = NoiseMonitor(cfg, ambient_source, store, ignore_schedule=True, heartbeat_interval_sec=0.01)
+    mon_ok.run(install_signals=False)
+    assert mon_ok.last_run_stats is not None
+    assert mon_ok.last_run_stats["mic_health"] == "OK"
+    assert mon_ok.last_run_stats["silent_blocks"] == 0
+    report_path = store.generate_daily_report("2026-11-27", monitor_stats=mon_ok.last_run_stats)
+    report_text = report_path.read_text(encoding="utf-8")
+    assert "运行健康审计" in report_text
+    assert "`OK`" in report_text
