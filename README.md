@@ -2,12 +2,12 @@
 
 # ham-monitor
 
-**开源、100% 本地离线、隐私优先的室内被动声学监测与司法级存证平台**
+**开源、100% 本地离线、隐私优先的室内被动声学监测与防篡改存证平台**
 将夜间主观的“楼上又在吵”，转化为**不可篡改、多维互证、可隐私脱敏外发**的结构化证据链。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-183B32.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-1D4E6B.svg)](pyproject.toml)
-[![Local-First](https://img.shields.io/badge/Privacy-100%25%20Local%20Offline-1F7A53.svg)](SECURITY_AND_PRIVACY.md)
+[![Local-First](https://img.shields.io/badge/Privacy-100%25%20Local%20Offline-1F7A53.svg)](docs/SECURITY_AND_PRIVACY.md)
 [![Zero Node Build](https://img.shields.io/badge/Web%20Console-FastAPI%20%2B%20Zero%20Build-A34F39.svg)](DESIGN.md)
 
 <br />
@@ -98,7 +98,7 @@ python scripts/run_web.py --demo --port 8765
 | [问题边界与跨领域案例 (docs/PROBLEM_BOUNDARIES_AND_CASES.md)](docs/PROBLEM_BOUNDARIES_AND_CASES.md) | 声源归因盲区批判、孤证天花板、跨领域开源取证参考（NoiseCapture / ProofMode）与自查清单 |
 | [架构与扩展契约 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md) | 全栈分层架构、数据契约与 Phase 2/3 插件扩展点 |
 | [前端设计系统 (DESIGN.md)](DESIGN.md) | 老钱档案级视觉 Token、排版层级、动效规范与双主题契约 |
-| [数据安全与隐私红线 (SECURITY_AND_PRIVACY.md)](SECURITY_AND_PRIVACY.md) | 四条法律红线、脱敏自查清单与免责声明 |
+| [数据安全与隐私红线 (docs/SECURITY_AND_PRIVACY.md)](docs/SECURITY_AND_PRIVACY.md) | 四条法律红线、脱敏自查清单与免责声明 |
 | [现场实测模板 (docs/FIELD_TEST.md)](docs/FIELD_TEST.md) | 声学探针底噪与信噪比实测记录表 |
 
 ---

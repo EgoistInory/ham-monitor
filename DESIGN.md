@@ -1,6 +1,6 @@
 # DESIGN.md — HAM Monitor 老钱档案级声学存证设计系统（v0.3 Archival Edition）
 
-> 参考 VibeFather 生态中 `Personal Budget Dashboard (Willowsum)` 的私行档案美学、`E-commerce Admin Dashboard` 的滑出抽屉与微动效纪律、以及 `Service Status Page` 的高权威状态展示，专为“长期室内声学监测与司法级存证”量身定制。
+> 参考 `Personal Budget Dashboard (Willowsum)` 的私行档案美学、`E-commerce Admin Dashboard` 的滑出抽屉与微动效纪律、以及 `Service Status Page` 的高权威状态展示，专为“长期室内声学监测与防篡改存证”量身定制。
 
 ## 1. 审美定位：私人银行级司法存证档案馆（Old-Money Archival Platform）
 
